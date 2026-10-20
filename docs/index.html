@@ -34,13 +34,13 @@
 <script src="common.js"></script>
 <script>
 const AREAS = [
-  { id: "onboarding",       num: 1, title: "Onboarding",      desc: "Briefing, intake, and asset-building before anything else starts." },
-  { id: "sourcing",         num: 2, title: "Sourcing",        desc: "Database, vetting, AI overviews — plus a master-list-style view of creator progress." },
-  { id: "gifting",          num: 3, title: "Gifting",         desc: "The gift application itself, plus cleaning up matches, dupes, and regifts." },
-  { id: "outreach",         num: 4, title: "Outreach",        desc: "Our own send tool — not paying Instantly or Mailmeteor indefinitely." },
-  { id: "order-placement",  num: 5, title: "Order Placement", desc: "Shopify (or CSV) orders, then the brief goes out automatically." },
-  { id: "content-tracking", num: 6, title: "Content Tracking",desc: "Our own Archive, a referral, or a hybrid — still mostly a business question." },
-  { id: "reporting",        num: 7, title: "Reporting",       desc: "A dashboard, like Magna." },
+  { id: "onboarding",       num: 1, title: "Onboarding" },
+  { id: "sourcing",         num: 2, title: "Sourcing" },
+  { id: "gifting",          num: 3, title: "Gifting" },
+  { id: "outreach",         num: 4, title: "Outreach" },
+  { id: "order-placement",  num: 5, title: "Order Placement" },
+  { id: "content-tracking", num: 6, title: "Content Tracking" },
+  { id: "reporting",        num: 7, title: "Reporting" },
 ];
 
 document.getElementById("header").innerHTML = renderHeader({ onDark: false });
@@ -50,7 +50,6 @@ document.getElementById("card-grid").innerHTML = AREAS.map((a, i) => `
   <a class="area-card${(lastAlone && i === AREAS.length - 1) ? " span-full" : ""}" href="${a.id}.html">
     <span class="card-num">${String(a.num).padStart(2,"0")}</span>
     <h3>${escHtml(a.title)}</h3>
-    <p>${escHtml(a.desc)}</p>
     <span class="arrow">&rarr;</span>
   </a>
 `).join("");

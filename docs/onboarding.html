@@ -11,47 +11,85 @@
 <div id="header"></div>
 <section class="hero" style="padding-bottom:40px">
   <div class="hero-inner" style="padding-top:50px">
-    <div class="eyebrow">A8I Process &middot; 01</div>
+    <div class="eyebrow">A8I &middot; 01</div>
     <h1>Onboarding</h1>
-    <p class="sub">Signing the client, then briefing and building the assets everything downstream reads from.</p>
+    <p class="sub">Tell us about the program — this sets up sourcing automatically.</p>
   </div>
 </section>
-<section class="section" style="padding-top:60px">
-  <div id="rows"></div>
-</section>
-<div id="footer"></div>
 
+<section class="section" style="padding-top:60px">
+  <form class="product-shell" onsubmit="return false">
+
+    <div class="form-block">
+      <div class="form-block-label">Program Basics</div>
+      <div class="field">
+        <label for="f-goals">What are your goals &amp; KPIs for this program?</label>
+        <textarea id="f-goals" placeholder="e.g. drive awareness and UGC volume ahead of our spring launch, target 2M+ impressions"></textarea>
+      </div>
+      <div class="field">
+        <label for="f-monthly">Monthly gifting goal</label>
+        <input type="number" id="f-monthly" placeholder="e.g. 50">
+        <div class="hint">How many creators you'd like gifted per month.</div>
+      </div>
+    </div>
+
+    <div class="form-block">
+      <div class="form-block-label">Who You're Looking For</div>
+      <div class="field">
+        <label for="f-archetype">Archetypes &amp; demographics</label>
+        <textarea id="f-archetype" placeholder="e.g. Gen Z wellness creators, home cooks, new moms"></textarea>
+      </div>
+      <div class="field">
+        <label>Restrictions &amp; preferences</label>
+        <div class="field-row">
+          <input type="text" placeholder="Location">
+          <select><option value="">Follower size</option><option>Nano (1k–25k)</option><option>Micro (25k–100k)</option><option>Mid (100k–250k)</option><option>Macro (250k–1M)</option><option>Mega (1M+)</option></select>
+          <select><option value="">Gender</option><option>Any</option><option>Female</option><option>Male</option><option>Non-binary</option></select>
+          <input type="text" placeholder="Age range (e.g. 18–34)">
+        </div>
+        <div class="hint">Matched against Agency Eight's creator database once connected.</div>
+      </div>
+    </div>
+
+    <div class="form-block">
+      <div class="form-block-label">Brand Materials</div>
+      <div class="field">
+        <label>Content brief, visual deck, or brand guide</label>
+        <label class="upload-zone" for="f-upload">
+          <div class="icon">&#8679;</div>
+          <div><strong>Click to upload</strong> or drag a file here</div>
+        </label>
+        <input type="file" id="f-upload" style="display:none">
+      </div>
+    </div>
+
+    <div class="form-block" style="border-bottom:none">
+      <div class="form-block-label">Need Help Figuring This Out?</div>
+      <div class="assist-panel">
+        <div class="assist-head">
+          <div class="dot">A</div>
+          <div><strong>Talk to Claude</strong><br><span>Helps translate this brief into sourcing criteria</span></div>
+        </div>
+        <div class="assist-bubble">Tell me about the program in your own words — who you're trying to reach, what's worked before, any creators you already love — and I'll turn it into sourcing filters and suggested archetypes for you.</div>
+        <div class="assist-input-row">
+          <input type="text" placeholder="e.g. We want creators who feel like a friend recommending us, not an ad...">
+          <button class="assist-send" type="button">Send</button>
+        </div>
+        <div class="assist-note">This also pre-fills your Sourcing criteria on the next step.</div>
+      </div>
+    </div>
+
+    <div class="form-cta">
+      <a class="btn btn-solid" href="sourcing.html">Continue to Sourcing &rarr;</a>
+    </div>
+  </form>
+</section>
+
+<div id="footer"></div>
 <script src="common.js"></script>
 <script>
-const ROWS = [
-  { num: 1, title: "Signing", note: "Contract signed — kicks everything else off.", items: [] },
-  { num: 2, title: "Onboarding", items: [
-    { text: "Briefing", children: [
-      { text: "Intake form:", children: [
-        { text: "What are the goals and KPIs of the program?" },
-        { text: "What are the monthly gifting goals?" },
-        { text: "Archetypes / demographics" },
-        { text: "Restrictions", children: [
-          { text: "Location" }, { text: "Size" }, { text: "Gender" }, { text: "Age" },
-        ]},
-      ]},
-    ]},
-    { text: "Building assets", children: [
-      { text: "List", children: [
-        { text: "Parameters — check filtering options on database", children: [
-          { text: "Are we doing only emails?", question: true },
-        ]},
-      ]},
-      { text: "Copy", children: [{ text: "Emmett's copy website" }] },
-      { text: "Brief", children: [
-        { text: "Claude design — Emmett's website", children: [{ text: "Powered by Claude" }] },
-      ]},
-    ]},
-  ]},
-];
 document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "index.html" });
 document.getElementById("footer").innerHTML = renderFooter();
-document.getElementById("rows").innerHTML = renderRowList(ROWS);
 </script>
 </body>
 </html>
