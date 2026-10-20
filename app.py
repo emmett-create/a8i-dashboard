@@ -102,7 +102,26 @@ STOPWORDS = {
 def _words(text: str) -> set:
     return {w for w in re.findall(r"[a-z]+", (text or "").lower()) if w not in STOPWORDS and len(w) > 2}
 
-def vertical_matches(description: str, vertical, archetype):
+# A vertical/archetype word that shows up on more than this fraction of the
+# WHOLE pool is too generic to count as a real signal on its own. Found via
+# a real query ("Cool lifestyle creators who would care about health and
+# skincare", no other restrictions) that matched 9,525 of 14,491 creators —
+# traced back to "lifestyle" alone (41% of the pool) and "fashion" (40%)
+# being common enough that almost everyone has one of them tagged, so
+# requiring just ANY shared word was nowhere near restrictive enough.
+GENERIC_WORD_DOC_FREQ = 0.25
+
+def _generic_vertical_words(creators: list) -> set:
+    from collections import Counter
+    freq = Counter()
+    for c in creators:
+        combined = f"{c['vertical'] or ''} {c['archetype'] or ''}"
+        for w in _words(combined):
+            freq[w] += 1
+    total = len(creators) or 1
+    return {w for w, n in freq.items() if n / total > GENERIC_WORD_DOC_FREQ}
+
+def vertical_matches(description: str, vertical, archetype, generic_words: set):
     desc_words = _words(description)
     if not desc_words:
         return "match"
@@ -110,7 +129,12 @@ def vertical_matches(description: str, vertical, archetype):
     combined_words = _words(combined)
     if not combined_words:
         return "unknown"
-    return "match" if desc_words & combined_words else "no_match"
+    overlap = desc_words & combined_words
+    if not overlap:
+        return "no_match"
+    # At least one SPECIFIC shared word required — an overlap made up
+    # entirely of generic tags (e.g. just "lifestyle") doesn't count.
+    return "match" if (overlap - generic_words) else "no_match"
 
 US_HINTS = {
     "us", "usa", "u.s", "u.s.a", "united", "states", "america", "american",
@@ -197,9 +221,9 @@ def follower_matches(f_min, f_max, value):
     hi = f_max if f_max is not None else float("inf")
     return "match" if lo <= value <= hi else "no_match"
 
-def classify(creator: dict, criteria: dict) -> dict:
+def classify(creator: dict, criteria: dict, generic_words: set) -> dict:
     checks = {
-        "vertical": vertical_matches(criteria.get("description", ""), creator["vertical"], creator["archetype"]),
+        "vertical": vertical_matches(criteria.get("description", ""), creator["vertical"], creator["archetype"], generic_words),
         "location": location_matches(criteria.get("location", ""), creator["location"]),
         "gender": gender_matches(criteria.get("gender", ""), creator["gender"]),
         "age": age_matches(criteria.get("age", ""), creator["age"]),
@@ -225,9 +249,10 @@ async def pool_summary():
 @app.post("/api/match")
 async def match(criteria: dict):
     creators = fetch_pool()
+    generic_words = _generic_vertical_words(creators)
     matched, partial, no_match = [], [], []
     for c in creators:
-        result = classify(c, criteria)
+        result = classify(c, criteria, generic_words)
         row = {**c, **result}
         if result["status"] == "match":
             matched.append(row)
