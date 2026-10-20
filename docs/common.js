@@ -47,6 +47,15 @@ function renderHeader({ onDark = true, back = null } = {}) {
   `;
 }
 
+function getSessionId() {
+  let id = localStorage.getItem("a8i_session_id");
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2)));
+    localStorage.setItem("a8i_session_id", id);
+  }
+  return id;
+}
+
 function renderFooter() {
   return `<footer class="site-footer">&copy; 2026 Agency Eight. a8i is built on the same system behind Agency Eight's full-service gifting programs.</footer>`;
 }

@@ -11,8 +11,9 @@ anything smarter.
 import json
 import re
 import time
+import uuid
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from google.oauth2 import service_account
 from googleapiclient.discovery import build as gbuild
@@ -63,14 +64,17 @@ def fetch_pool(force: bool = False) -> list:
             range=f"'{config.MASTER_LIST_TAB}'!A2:AM20000",
         ).execute()
         rows = resp.get("values", [])
-        for r in rows:
+        for i, r in enumerate(rows):
             name = _cell(r, cols.get("name"))
             if not name:
                 continue
+            ig_handle = _cell(r, cols.get("ig_handle")).lstrip("@")
             creators.append({
+                "id": f"{client_name}::{i}",
                 "client": client_name,
                 "name": name,
-                "ig_handle": _cell(r, cols.get("ig_handle")),
+                "ig_handle": ig_handle,
+                "ig_url": f"https://instagram.com/{ig_handle}" if ig_handle else None,
                 "followers": _to_int(_cell(r, cols.get("followers"))),
                 "gender": _cell(r, cols.get("gender")) or None,
                 "vertical": _cell(r, cols.get("vertical")) or None,
@@ -231,14 +235,53 @@ async def match(criteria: dict):
             partial.append(row)
         else:
             no_match.append(row)
+
+    # Biggest creators first within each bucket — a reasonable default
+    # ordering for a review list, not a ranking claim.
+    matched.sort(key=lambda c: c["followers"] or 0, reverse=True)
+    partial.sort(key=lambda c: c["followers"] or 0, reverse=True)
+
+    limit_matched = min(int(criteria.get("limit_matched") or 150), len(matched))
+    limit_partial = min(int(criteria.get("limit_partial") or 75), len(partial))
+
     return {
         "total": len(creators),
         "matched": len(matched),
         "partial": len(partial),
         "no_match": len(no_match),
-        "sample_matched": matched[:10],
-        "sample_partial": partial[:5],
+        "matched_creators": matched[:limit_matched],
+        "partial_creators": partial[:limit_partial],
     }
+
+# ── Brand materials (brand decks, visual guidelines, target-demo PDFs) ──────
+# Accepted and stored (in memory, keyed by a per-browser session id the
+# frontend generates and keeps in localStorage) so the upload flow is real.
+# NOT parsed into the matcher yet — that's a real next step (extracting
+# actual signal out of a PDF deck), not something to fake. Render's disk is
+# ephemeral too, so this is memory-only and won't survive a redeploy/restart
+# — fine for a prototype, not a place to rely on for anything durable yet.
+_briefs_by_session: dict = {}
+
+@app.post("/api/upload_briefs")
+async def upload_briefs(session_id: str = Form(...), files: list[UploadFile] = File(...)):
+    stored = _briefs_by_session.setdefault(session_id, [])
+    added = []
+    for f in files:
+        content = await f.read()
+        entry = {"id": str(uuid.uuid4()), "filename": f.filename, "size": len(content), "content_type": f.content_type}
+        stored.append(entry)
+        added.append(entry)
+    return {"added": added, "total_for_session": len(stored)}
+
+@app.get("/api/briefs")
+async def list_briefs(session_id: str):
+    return {"files": _briefs_by_session.get(session_id, [])}
+
+@app.delete("/api/briefs/{session_id}/{file_id}")
+async def delete_brief(session_id: str, file_id: str):
+    stored = _briefs_by_session.get(session_id, [])
+    _briefs_by_session[session_id] = [f for f in stored if f["id"] != file_id]
+    return {"files": _briefs_by_session[session_id]}
 
 @app.get("/")
 def root():

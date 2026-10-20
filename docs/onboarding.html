@@ -74,17 +74,18 @@
     <div class="form-block" style="border-bottom:none">
       <div class="form-block-label">Brand Materials</div>
       <div class="field">
-        <label>Content brief, visual deck, or brand guide</label>
+        <label>Brand decks, visual guidelines, target demo docs — add as many as you need</label>
         <label class="upload-zone" for="f-upload">
           <div class="icon">&#8679;</div>
-          <div><strong>Click to upload</strong> or drag a file here</div>
+          <div><strong>Click to upload</strong> or drag files here</div>
         </label>
-        <input type="file" id="f-upload" style="display:none">
+        <input type="file" id="f-upload" accept="application/pdf" multiple style="display:none">
+        <div id="brief-list" class="brief-list"></div>
       </div>
     </div>
 
     <div class="form-cta">
-      <a class="btn btn-solid" href="sourcing.html">Continue to Sourcing &rarr;</a>
+      <a class="btn btn-outline" href="sourcing.html" id="cta-sourcing" aria-disabled="true">Continue to Sourcing &rarr;</a>
     </div>
   </form>
 </section>
@@ -157,7 +158,17 @@ async function sendAssist() {
     const data = await res.json();
     assistReply.textContent =
       `${data.matched.toLocaleString()} confident match${data.matched === 1 ? "" : "es"} out of ${data.total.toLocaleString()} test creators ` +
-      `(plus ${data.partial.toLocaleString()} partial — missing data on one field, like location or age).`;
+      `(plus ${data.partial.toLocaleString()} partial — missing data on one field, like location or age). Ready for review in Sourcing.`;
+
+    // Hand the real result off to the Sourcing page — static pages can't
+    // share state otherwise, so this is what "Continue to Sourcing" means
+    // right now: the criteria + the creators that came back, not a live
+    // re-query every time you navigate.
+    localStorage.setItem("a8i_match_result", JSON.stringify({ criteria, data, savedAt: Date.now() }));
+    const cta = document.getElementById("cta-sourcing");
+    cta.removeAttribute("aria-disabled");
+    cta.classList.remove("btn-outline");
+    cta.classList.add("btn-solid");
   } catch (e) {
     assistReply.textContent = `Couldn't reach the test database (${e.message}). It may still be waking up — try again in a moment.`;
   } finally {
@@ -166,6 +177,81 @@ async function sendAssist() {
 }
 assistSend.addEventListener("click", sendAssist);
 assistInput.addEventListener("keydown", e => { if (e.key === "Enter") sendAssist(); });
+
+// Prevent navigating while the CTA is still visually "disabled" (plain <a>
+// tags have no real disabled state).
+document.getElementById("cta-sourcing").addEventListener("click", e => {
+  if (e.currentTarget.getAttribute("aria-disabled") === "true") e.preventDefault();
+});
+// If a result from an earlier visit is already saved, the CTA should start
+// enabled rather than forcing a re-send.
+if (localStorage.getItem("a8i_match_result")) {
+  const cta = document.getElementById("cta-sourcing");
+  cta.removeAttribute("aria-disabled");
+  cta.classList.remove("btn-outline");
+  cta.classList.add("btn-solid");
+}
+
+// ── Brand materials: multi-file upload ──────────────────────────────────────
+// Uploaded to the same backend as the matcher, keyed by a per-browser
+// session id — real files, really sent, but not yet parsed into the
+// matching logic itself (that's a separate, bigger piece of work: actually
+// extracting signal out of a PDF deck).
+const SESSION_ID = getSessionId();
+const briefList = document.getElementById("brief-list");
+const fileInput = document.getElementById("f-upload");
+
+function renderBriefRow(entry, uploading) {
+  const row = document.createElement("div");
+  row.className = "brief-item" + (uploading ? " uploading" : "");
+  row.dataset.id = entry.id || "";
+  row.innerHTML = `
+    <span><span class="name">${escHtml(entry.filename)}</span><span class="meta">${uploading ? "uploading…" : Math.round(entry.size / 1024) + " KB"}</span></span>
+    ${uploading ? "" : `<button class="remove" type="button" title="Remove">&times;</button>`}
+  `;
+  if (!uploading) {
+    row.querySelector(".remove").addEventListener("click", async () => {
+      row.remove();
+      try {
+        await fetch(`${API_BASE}/api/briefs/${SESSION_ID}/${entry.id}`, { method: "DELETE" });
+      } catch { /* best-effort — it's gone from the UI either way */ }
+    });
+  }
+  return row;
+}
+
+fileInput.addEventListener("change", async () => {
+  const files = [...fileInput.files];
+  fileInput.value = "";
+  if (!files.length) return;
+
+  const placeholders = files.map(f => renderBriefRow({ filename: f.name, size: f.size }, true));
+  placeholders.forEach(p => briefList.appendChild(p));
+
+  const form = new FormData();
+  form.append("session_id", SESSION_ID);
+  files.forEach(f => form.append("files", f));
+
+  try {
+    const res = await fetch(`${API_BASE}/api/upload_briefs`, { method: "POST", body: form });
+    if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+    const data = await res.json();
+    placeholders.forEach(p => p.remove());
+    data.added.forEach(entry => briefList.appendChild(renderBriefRow(entry, false)));
+  } catch (e) {
+    placeholders.forEach(p => { p.classList.remove("uploading"); p.querySelector(".meta").textContent = `failed to upload — ${e.message}`; });
+  }
+});
+
+// Restore any files already uploaded this session (e.g. coming back to this page).
+(async () => {
+  try {
+    const res = await fetch(`${API_BASE}/api/briefs?session_id=${encodeURIComponent(SESSION_ID)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    data.files.forEach(entry => briefList.appendChild(renderBriefRow(entry, false)));
+  } catch { /* backend may still be waking up — not critical on load */ }
+})();
 </script>
 </body>
 </html>
