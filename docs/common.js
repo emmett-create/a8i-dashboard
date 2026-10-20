@@ -42,12 +42,11 @@ function renderHeader({ onDark = true, back = null } = {}) {
       }
       <nav class="header-nav">
         <a href="index.html">Process</a>
-        <a href="big-questions.html">Big Questions</a>
       </nav>
     </header>
   `;
 }
 
 function renderFooter() {
-  return `<footer class="site-footer">Rough visual skeleton as of the 2026-10-20 working session — content mirrors the live "Our Process" Notion page. Not a functional build yet.</footer>`;
+  return `<footer class="site-footer">&copy; 2026 Agency Eight. a8i is built on the same system behind Agency Eight's full-service gifting programs.</footer>`;
 }
