@@ -189,12 +189,12 @@ a { color: inherit; text-decoration: none; }
 .field label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
 .field .hint { font-size: 12px; color: var(--dim); margin-top: 6px; }
 .field input[type=text], .field input[type=number], .field select, .field textarea,
-.assist-input-row input[type=text] {
+.assist-input-row input[type=text], .modal-card input[type=text], .modal-card input[type=password] {
   width: 100%; font-family: var(--display); font-size: 14px; color: var(--black);
   background: var(--white); border: 1.5px solid var(--line); border-radius: 8px;
   padding: 11px 14px; outline: none; transition: border-color .15s ease;
 }
-.field input:focus, .field select:focus, .field textarea:focus, .assist-input-row input:focus { border-color: var(--red); }
+.field input:focus, .field select:focus, .field textarea:focus, .assist-input-row input:focus, .modal-card input:focus { border-color: var(--red); }
 .field textarea { resize: vertical; min-height: 84px; }
 .field-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .field-row-3 { grid-template-columns: repeat(3, 1fr); }
@@ -265,6 +265,15 @@ a.btn[aria-disabled="true"] { opacity: .4; pointer-events: none; cursor: not-all
 
 .empty-state { text-align: center; padding: 60px 20px; color: var(--dim); }
 .empty-state a { color: var(--red); font-weight: 700; }
+
+/* ── Modal overlay (API key prompt) ─────────────────────────────────── */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+.modal-card { background: var(--ivory); border-radius: 14px; padding: 32px; max-width: 420px; width: 100%; }
+.modal-card h3 { font-size: 19px; font-weight: 700; margin-bottom: 10px; }
+.modal-card p { font-size: 13.5px; color: var(--dim); line-height: 1.5; margin-bottom: 16px; }
+.modal-card input { width: 100%; margin-bottom: 16px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.modal-actions button { font-family: inherit; }
 
 /* ── Dark panel (describe → auto-fill sourcing criteria) ─────────────
    Deliberately NOT structured as a chat thread (no nested message

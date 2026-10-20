@@ -90,8 +90,41 @@
   </form>
 </section>
 
+<div class="overlay hidden" id="key-overlay">
+  <div class="modal-card">
+    <h3>One-time setup</h3>
+    <p>Reading brand materials into sourcing criteria needs an Anthropic API key. It's stored only in this browser — never sent anywhere except directly to Anthropic.</p>
+    <input type="password" id="key-input" placeholder="sk-ant-...">
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="key-cancel">Cancel</button>
+      <button class="btn btn-solid" type="button" id="key-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <div id="footer"></div>
 <script src="common.js"></script>
+
+<script type="module">
+// pdf.js — extracts real text from each uploaded PDF client-side, so brand
+// decks can actually be read into sourcing criteria without needing a
+// server round-trip just for text extraction.
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.4.299/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.4.299/pdf.worker.min.mjs";
+
+window.extractPdfText = async function extractPdfText(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(" ") + "\n";
+  }
+  return text;
+};
+</script>
+
 <script>
 document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "index.html" });
 document.getElementById("footer").innerHTML = renderFooter();
@@ -133,17 +166,121 @@ const assistInput = document.getElementById("assist-input");
 const assistReply = document.getElementById("assist-reply");
 const assistSend = document.getElementById("assist-send");
 
+// ── Anthropic API key (yours, stored only in this browser) ─────────────────
+// Same pattern as outreach-brief-creator: a direct browser->Anthropic call
+// using whatever key you paste in once, never sent to our own backend.
+const ANTHROPIC_KEY_STORAGE = "a8i_anthropic_key";
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_MODEL = "claude-sonnet-4-6";
+
+function getAnthropicKey() {
+  return localStorage.getItem(ANTHROPIC_KEY_STORAGE) || "";
+}
+function promptForAnthropicKey() {
+  return new Promise(resolve => {
+    const overlay = document.getElementById("key-overlay");
+    const input = document.getElementById("key-input");
+    input.value = "";
+    overlay.classList.remove("hidden");
+    input.focus();
+    const cleanup = (val) => { overlay.classList.add("hidden"); resolve(val); };
+    document.getElementById("key-save").onclick = () => {
+      const val = input.value.trim();
+      if (val) localStorage.setItem(ANTHROPIC_KEY_STORAGE, val);
+      cleanup(val);
+    };
+    document.getElementById("key-cancel").onclick = () => cleanup("");
+  });
+}
+
+async function callAnthropic(systemPrompt, userMessage, apiKey) {
+  const res = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 800,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMessage }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Anthropic request failed (${res.status})`);
+  }
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+const BRIEF_ANALYSIS_PROMPT = `You are helping an influencer-marketing program manager turn their brand materials into creator-sourcing criteria.
+
+You'll be given their own plain-language description of who they're looking for, plus text extracted from one or more brand decks, visual guidelines, or target-demo documents they uploaded.
+
+Respond with STRICT JSON ONLY (no markdown fences, no commentary) in exactly this shape:
+{
+  "summary": "one sentence describing what in the materials is relevant to sourcing, written back to the user",
+  "keywords": ["specific", "content or vertical terms", "actually evidenced in the materials"],
+  "location": "a short restriction phrase if the materials clearly indicate one, else an empty string",
+  "gender": "a short restriction phrase if the materials clearly indicate one, else an empty string",
+  "age": "a short age range if the materials clearly indicate one, else an empty string"
+}
+
+Keep "keywords" to at most 8 items, and skip generic terms like "lifestyle" or "fashion" unless nothing more specific is evidenced. Only fill location/gender/age with clear evidence from the materials — leave them as empty strings otherwise, don't guess.`;
+
+function parseJsonReply(raw) {
+  const clean = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
+  return JSON.parse(clean);
+}
+
 async function sendAssist() {
   if (!assistInput.value.trim()) return;
   assistSend.disabled = true;
-  assistReply.textContent = "Checking against the test creator database — this can take up to a minute if it's been idle…";
+
+  const locationField = document.getElementById("f-location");
+  const genderField = document.getElementById("f-gender");
+  const ageField = document.getElementById("f-age");
+  let description = assistInput.value.trim();
+
+  // If brand materials were uploaded and actually produced extractable
+  // text, read them into the criteria first — this is the real "parsed and
+  // incorporated" step, not just accepted and ignored.
+  const textsToAnalyze = uploadedFileTexts.filter(t => t.text && t.text.trim());
+  if (textsToAnalyze.length) {
+    let apiKey = getAnthropicKey();
+    if (!apiKey) apiKey = await promptForAnthropicKey();
+    if (apiKey) {
+      assistReply.textContent = `Reading ${textsToAnalyze.length} brand document${textsToAnalyze.length === 1 ? "" : "s"}…`;
+      assistReply.classList.remove("hidden");
+      try {
+        const userMessage =
+          `MY DESCRIPTION:\n${description}\n\n` +
+          textsToAnalyze.map((t, i) => `--- DOCUMENT ${i + 1}: ${t.filename} ---\n${t.text.slice(0, 8000)}`).join("\n\n");
+        const raw = await callAnthropic(BRIEF_ANALYSIS_PROMPT, userMessage, apiKey);
+        const parsed = parseJsonReply(raw);
+        if (parsed.keywords && parsed.keywords.length) description += ", " + parsed.keywords.join(", ");
+        if (!locationField.value.trim() && parsed.location) locationField.value = parsed.location;
+        if (!genderField.value.trim() && parsed.gender) genderField.value = parsed.gender;
+        if (!ageField.value.trim() && parsed.age) ageField.value = parsed.age;
+        assistReply.textContent = parsed.summary || "Read your brand materials.";
+      } catch (e) {
+        assistReply.textContent = `Couldn't read the brand materials (${e.message}) — continuing with just your description.`;
+      }
+    }
+  }
+
+  assistReply.textContent += (assistReply.textContent ? " " : "") + "Checking against the test creator database — this can take up to a minute if it's been idle…";
   assistReply.classList.remove("hidden");
 
   const criteria = {
-    description: assistInput.value.trim(),
-    location: document.getElementById("f-location").value.trim(),
-    gender: document.getElementById("f-gender").value.trim(),
-    age: document.getElementById("f-age").value.trim(),
+    description,
+    location: locationField.value.trim(),
+    gender: genderField.value.trim(),
+    age: ageField.value.trim(),
     follower_min: followerCountFromPct(+fMin.value),
     follower_max: followerCountFromPct(+fMax.value),
   };
@@ -194,12 +331,13 @@ if (localStorage.getItem("a8i_match_result")) {
 
 // ── Brand materials: multi-file upload ──────────────────────────────────────
 // Uploaded to the same backend as the matcher, keyed by a per-browser
-// session id — real files, really sent, but not yet parsed into the
-// matching logic itself (that's a separate, bigger piece of work: actually
-// extracting signal out of a PDF deck).
+// session id. Text is ALSO extracted client-side (pdf.js, see the module
+// script above) and fed to a real Claude call when you hit Send — that's
+// the actual "parsed and incorporated" step, not just accepted and stored.
 const SESSION_ID = getSessionId();
 const briefList = document.getElementById("brief-list");
 const fileInput = document.getElementById("f-upload");
+const uploadedFileTexts = []; // [{filename, text}] — survives only this page load; re-extracted from the file each time, not persisted
 
 function renderBriefRow(entry, uploading) {
   const row = document.createElement("div");
@@ -227,6 +365,14 @@ fileInput.addEventListener("change", async () => {
 
   const placeholders = files.map(f => renderBriefRow({ filename: f.name, size: f.size }, true));
   placeholders.forEach(p => briefList.appendChild(p));
+
+  // Extract text client-side — independent of the upload itself, so a slow
+  // or failed upload doesn't block having the content available to analyze.
+  files.forEach(f => {
+    window.extractPdfText(f)
+      .then(text => uploadedFileTexts.push({ filename: f.name, text }))
+      .catch(() => uploadedFileTexts.push({ filename: f.name, text: "" })); // scanned/image-only PDFs yield no text — handled as "nothing extracted", not a crash
+  });
 
   const form = new FormData();
   form.append("session_id", SESSION_ID);
