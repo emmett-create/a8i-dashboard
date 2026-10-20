@@ -96,21 +96,25 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ── Area cards (hub) ───────────────────────────────────────────────── */
-/* One shared red canvas for the whole grid (not per-card) — the logo
-   watermark lives here, centered across the full grid, so it reads as
-   one emblem behind all 7 boxes rather than one icon repeated in each.
-   Individual .area-card tiles are transparent "windows" onto this, with
-   borders standing in for the old grid-gap dividers. */
+/* No logo inside the boxes — see .process-row / .side-logo below instead,
+   which flank the grid in the page margins. Cards are transparent
+   "windows" onto the grid's own red fill, with a border standing in for
+   the old grid-gap dividers. */
 .card-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
   position: relative; background: var(--red); overflow: hidden;
 }
-.card-grid::before {
-  content: ""; position: absolute; inset: 0; margin: auto; width: 440px; height: 440px;
-  background: url('assets/icon-red.png') center / contain no-repeat;
-  filter: brightness(0) invert(1); opacity: .1; pointer-events: none;
-}
 @media (max-width: 760px) { .card-grid { grid-template-columns: 1fr; } }
+
+/* Breaks out of .section's max-width to span the full viewport, so the
+   side logos can sit in the actual page margins rather than being
+   squeezed next to the grid. The grid itself keeps its original width,
+   centered exactly as before. */
+.process-row { display: flex; align-items: stretch; position: relative; width: 100vw; left: 50%; transform: translateX(-50%); }
+.process-row .card-grid { flex: 0 0 auto; width: min(100% - 80px, 1020px); margin: 0 auto; }
+.side-logo { flex: 1 1 0; display: flex; align-items: center; justify-content: center; min-width: 0; }
+.side-logo .mark { width: 120px; height: 120px; background: url('assets/icon-red.png') center / contain no-repeat; opacity: .22; }
+@media (max-width: 900px) { .side-logo { display: none; } }
 .area-card {
   color: var(--white); background: transparent;
   border: 1px solid rgba(255,255,255,.18);
