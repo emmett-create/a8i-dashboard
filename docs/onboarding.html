@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onboarding — a8i</title>
+<link rel="icon" href="assets/icon-red.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="header"></div>
+<section class="hero" style="padding-bottom:40px">
+  <div class="hero-inner" style="padding-top:50px">
+    <div class="eyebrow">A8I Process &middot; 01</div>
+    <h1>Onboarding</h1>
+    <p class="sub">Signing the client, then briefing and building the assets everything downstream reads from.</p>
+  </div>
+</section>
+<section class="section" style="padding-top:60px">
+  <div id="rows"></div>
+</section>
+<div id="footer"></div>
+
+<script src="common.js"></script>
+<script>
+const ROWS = [
+  { num: 1, title: "Signing", note: "Contract signed — kicks everything else off.", items: [] },
+  { num: 2, title: "Onboarding", items: [
+    { text: "Briefing", children: [
+      { text: "Intake form:", children: [
+        { text: "What are the goals and KPIs of the program?" },
+        { text: "What are the monthly gifting goals?" },
+        { text: "Archetypes / demographics" },
+        { text: "Restrictions", children: [
+          { text: "Location" }, { text: "Size" }, { text: "Gender" }, { text: "Age" },
+        ]},
+      ]},
+    ]},
+    { text: "Building assets", children: [
+      { text: "List", children: [
+        { text: "Parameters — check filtering options on database", children: [
+          { text: "Are we doing only emails?", question: true },
+        ]},
+      ]},
+      { text: "Copy", children: [{ text: "Emmett's copy website" }] },
+      { text: "Brief", children: [
+        { text: "Claude design — Emmett's website", children: [{ text: "Powered by Claude" }] },
+      ]},
+    ]},
+  ]},
+];
+document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "index.html" });
+document.getElementById("footer").innerHTML = renderFooter();
+document.getElementById("rows").innerHTML = renderRowList(ROWS);
+</script>
+</body>
+</html>

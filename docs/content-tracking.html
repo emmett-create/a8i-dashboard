@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content Tracking — a8i</title>
+<link rel="icon" href="assets/icon-red.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="header"></div>
+<section class="hero" style="padding-bottom:40px">
+  <div class="hero-inner" style="padding-top:50px">
+    <div class="eyebrow">A8I Process &middot; 06</div>
+    <h1>Content Tracking</h1>
+    <p class="sub">Whether we build our own Archive, refer out to the real thing, or something in between.</p>
+  </div>
+</section>
+<section class="section" style="padding-top:60px">
+  <div id="rows"></div>
+</section>
+<div id="footer"></div>
+
+<script src="common.js"></script>
+<script>
+const ROWS = [
+  { num: 1, title: "Tracking Content", status: "later",
+    note: "Flagged lower priority for now — mostly a business/partnership question, not a build question yet.",
+    items: [
+      { text: "Our own Archive?", children: [
+        { text: "Powered by Archive", children: [
+          { text: "Our own Archive doesn't give them access to their own workspace" },
+        ]},
+        { text: "Referral + connecting to the system?" },
+        { text: "Basic internal version of Archive" },
+      ]},
+      { text: "Do we work with Archive?", question: true },
+    ]},
+];
+document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "index.html" });
+document.getElementById("footer").innerHTML = renderFooter();
+document.getElementById("rows").innerHTML = renderRowList(ROWS);
+</script>
+</body>
+</html>
