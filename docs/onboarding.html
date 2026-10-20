@@ -35,29 +35,39 @@
 
     <div class="form-block">
       <div class="form-block-label">Who You're Looking For</div>
-      <div class="field">
-        <label for="f-archetype">Describe who you're looking for, in your own words</label>
-        <textarea id="f-archetype" placeholder="e.g. Gen Z wellness creators who feel like a friend recommending us, not an ad — think home cooks, new moms, people already into clean beauty"></textarea>
-        <div class="hint">This pre-fills your Sourcing criteria on the next step.</div>
-      </div>
-      <div class="field">
-        <label>Restrictions &amp; preferences</label>
-        <div class="field-row field-row-3">
-          <input type="text" placeholder="Location — e.g. US only">
-          <input type="text" placeholder="Gender — e.g. primarily female">
-          <input type="text" placeholder="Age — e.g. 18–34">
+      <div class="assist-panel">
+        <div class="assist-head">
+          <div class="dot">A</div>
+          <div><strong>Describe your ideal creator</strong><span>Shapes your Sourcing list once the database is connected</span></div>
         </div>
-      </div>
-      <div class="field">
-        <label>Follower size</label>
-        <div class="range-slider" id="follower-slider">
-          <div class="range-track"></div>
-          <div class="range-fill" id="follower-fill"></div>
-          <input type="range" min="0" max="100" value="10" id="follower-min">
-          <input type="range" min="0" max="100" value="60" id="follower-max">
+        <div class="assist-bubble">Tell me about the program in your own words — who you're trying to reach, what's worked before, any creators you already love.</div>
+        <div class="assist-input-row">
+          <input type="text" id="assist-input" placeholder="e.g. Gen Z wellness creators who feel like a friend recommending us, not an ad...">
+          <button class="assist-send" type="button" id="assist-send">Send</button>
         </div>
-        <div class="range-labels"><span id="follower-min-label"></span><span>&ndash;</span><span id="follower-max-label"></span></div>
-        <div class="hint">Matched against Agency Eight's creator database once connected.</div>
+        <div class="assist-bubble reply hidden" id="assist-reply"></div>
+
+        <div class="divider"></div>
+
+        <div class="field">
+          <label>Restrictions &amp; preferences</label>
+          <div class="field-row field-row-3">
+            <input type="text" id="f-location" placeholder="Location — e.g. US only">
+            <input type="text" id="f-gender" placeholder="Gender — e.g. primarily female">
+            <input type="text" id="f-age" placeholder="Age — e.g. 18–34">
+          </div>
+        </div>
+        <div class="field">
+          <label>Follower size</label>
+          <div class="range-slider" id="follower-slider">
+            <div class="range-track"></div>
+            <div class="range-fill" id="follower-fill"></div>
+            <input type="range" min="0" max="100" value="10" id="follower-min">
+            <input type="range" min="0" max="100" value="60" id="follower-max">
+          </div>
+          <div class="range-labels"><span id="follower-min-label"></span><span>&ndash;</span><span id="follower-max-label"></span></div>
+          <div class="hint">Matched against Agency Eight's creator database once connected.</div>
+        </div>
       </div>
     </div>
 
@@ -106,6 +116,20 @@ function updateFollowerSlider() {
 fMin.addEventListener("input", () => { if (+fMin.value > +fMax.value) fMin.value = fMax.value; updateFollowerSlider(); });
 fMax.addEventListener("input", () => { if (+fMax.value < +fMin.value) fMax.value = fMin.value; updateFollowerSlider(); });
 updateFollowerSlider();
+
+// Not wired up to a real model yet — there's no creator database to match
+// against until that's connected. This just acknowledges the input so the
+// flow feels real; the actual parsing/matching comes once Sourcing has
+// something to search.
+const assistInput = document.getElementById("assist-input");
+const assistReply = document.getElementById("assist-reply");
+function sendAssist() {
+  if (!assistInput.value.trim()) return;
+  assistReply.textContent = "Noted — this will help shape your Sourcing list once the creator database is connected.";
+  assistReply.classList.remove("hidden");
+}
+document.getElementById("assist-send").addEventListener("click", sendAssist);
+assistInput.addEventListener("keydown", e => { if (e.key === "Enter") sendAssist(); });
 </script>
 </body>
 </html>
