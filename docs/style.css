@@ -316,3 +316,28 @@ table.src-table { border-collapse: collapse; width: 100%; font-size: 13px; white
 
 /* ── Footer ─────────────────────────────────────────────────────────── */
 .site-footer { padding: 30px 40px 50px; text-align: center; font-size: 11px; color: var(--dim); }
+
+/* ── Splash / landing page ──────────────────────────────────────────── */
+html, body { height: 100%; }
+.splash {
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: linear-gradient(115deg, #CA0100 0%, #4a0300 42%, #2b0000 58%, #d16a63 92%);
+  position: relative; text-align: center; padding: 40px;
+  transition: opacity .5s ease;
+}
+.splash.fade-out { opacity: 0; }
+.splash-site-link {
+  position: absolute; top: 28px; right: 34px;
+  color: var(--white); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  text-decoration: none;
+}
+.splash-site-link:hover { opacity: .8; }
+.splash-eyebrow { font-family: var(--accent-serif); font-style: italic; color: rgba(255,255,255,.85); font-size: 19px; margin-bottom: 14px; }
+.splash-title { font-family: var(--display); font-size: clamp(70px, 14vw, 160px); font-weight: 700; color: var(--white); line-height: .95; margin-bottom: 20px; }
+.splash-sub { font-family: var(--accent-serif); font-style: italic; color: rgba(255,255,255,.9); font-size: clamp(16px, 2.4vw, 24px); margin-bottom: 44px; }
+.splash-enter {
+  background: var(--white); color: var(--red); padding: 16px 52px; border-radius: 999px;
+  font-family: var(--display); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; font-size: 13px;
+  border: none; cursor: pointer; transition: filter .15s ease;
+}
+.splash-enter:hover { filter: brightness(.95); }

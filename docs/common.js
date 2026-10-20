@@ -38,10 +38,11 @@ function renderHeader({ onDark = true, back = null } = {}) {
     <header class="site-header ${onDark ? "on-dark" : ""}">
       ${back
         ? `<a class="back-link" href="${back}">&larr; a8i</a>`
-        : `<a class="brand-mark" href="index.html"><span class="dot">A</span><span class="mark">AGENCY&nbsp;EIGHT &middot; a8i</span></a>`
+        : `<a class="brand-mark" href="process.html"><span class="dot">A</span><span class="mark">AGENCY&nbsp;EIGHT &middot; a8i</span></a>`
       }
       <nav class="header-nav">
-        <a href="index.html">Process</a>
+        <a href="process.html">Process</a>
+        <a href="https://agency-eight.com" target="_blank" rel="noopener">Agency Eight &#8599;</a>
       </nav>
     </header>
   `;

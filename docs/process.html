@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>a8i — Our Process</title>
+<link rel="icon" href="assets/icon-red.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="header"></div>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Agency Eight</div>
+    <h1>A8I</h1>
+    <p class="sub">A lighter, self-serve version of Agency Eight.</p>
+    <div class="tagline">Built on Agency Eight's playbook</div>
+  </div>
+</section>
+
+<div class="asterisk-divider">* * *</div>
+
+<section class="section">
+  <div class="section-head">
+    <h2>The Process</h2>
+    <p class="sub">Everything a Program Needs</p>
+  </div>
+  <div class="process-row">
+    <div class="side-logo" aria-hidden="true"><div class="mark"></div></div>
+    <div class="card-grid" id="card-grid"></div>
+    <div class="side-logo" aria-hidden="true"><div class="mark"></div></div>
+  </div>
+</section>
+
+<div id="footer"></div>
+
+<script src="common.js"></script>
+<script>
+const AREAS = [
+  { id: "onboarding",       num: 1, title: "Onboarding" },
+  { id: "sourcing",         num: 2, title: "Sourcing" },
+  { id: "gifting",          num: 3, title: "Gifting" },
+  { id: "outreach",         num: 4, title: "Outreach" },
+  { id: "order-placement",  num: 5, title: "Order Placement" },
+  { id: "content-tracking", num: 6, title: "Content Tracking" },
+  { id: "reporting",        num: 7, title: "Reporting" },
+];
+
+document.getElementById("header").innerHTML = renderHeader({ onDark: false });
+document.getElementById("footer").innerHTML = renderFooter();
+const lastAlone = AREAS.length % 3 === 1;
+document.getElementById("card-grid").innerHTML = AREAS.map((a, i) => `
+  <a class="area-card${(lastAlone && i === AREAS.length - 1) ? " span-full" : ""}" href="${a.id}.html">
+    <h3>${escHtml(a.title)}</h3>
+    <span class="arrow">&rarr;</span>
+  </a>
+`).join("");
+</script>
+</body>
+</html>
