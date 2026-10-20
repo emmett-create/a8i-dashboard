@@ -36,22 +36,32 @@
     <div class="form-block">
       <div class="form-block-label">Who You're Looking For</div>
       <div class="field">
-        <label for="f-archetype">Archetypes &amp; demographics</label>
-        <textarea id="f-archetype" placeholder="e.g. Gen Z wellness creators, home cooks, new moms"></textarea>
+        <label for="f-archetype">Describe who you're looking for, in your own words</label>
+        <textarea id="f-archetype" placeholder="e.g. Gen Z wellness creators who feel like a friend recommending us, not an ad — think home cooks, new moms, people already into clean beauty"></textarea>
+        <div class="hint">This pre-fills your Sourcing criteria on the next step.</div>
       </div>
       <div class="field">
         <label>Restrictions &amp; preferences</label>
-        <div class="field-row">
-          <input type="text" placeholder="Location">
-          <select><option value="">Follower size</option><option>Nano (1k–25k)</option><option>Micro (25k–100k)</option><option>Mid (100k–250k)</option><option>Macro (250k–1M)</option><option>Mega (1M+)</option></select>
-          <select><option value="">Gender</option><option>Any</option><option>Female</option><option>Male</option><option>Non-binary</option></select>
-          <input type="text" placeholder="Age range (e.g. 18–34)">
+        <div class="field-row field-row-3">
+          <input type="text" placeholder="Location — e.g. US only">
+          <input type="text" placeholder="Gender — e.g. primarily female">
+          <input type="text" placeholder="Age — e.g. 18–34">
         </div>
+      </div>
+      <div class="field">
+        <label>Follower size</label>
+        <div class="range-slider" id="follower-slider">
+          <div class="range-track"></div>
+          <div class="range-fill" id="follower-fill"></div>
+          <input type="range" min="0" max="100" value="10" id="follower-min">
+          <input type="range" min="0" max="100" value="60" id="follower-max">
+        </div>
+        <div class="range-labels"><span id="follower-min-label"></span><span>&ndash;</span><span id="follower-max-label"></span></div>
         <div class="hint">Matched against Agency Eight's creator database once connected.</div>
       </div>
     </div>
 
-    <div class="form-block">
+    <div class="form-block" style="border-bottom:none">
       <div class="form-block-label">Brand Materials</div>
       <div class="field">
         <label>Content brief, visual deck, or brand guide</label>
@@ -60,22 +70,6 @@
           <div><strong>Click to upload</strong> or drag a file here</div>
         </label>
         <input type="file" id="f-upload" style="display:none">
-      </div>
-    </div>
-
-    <div class="form-block" style="border-bottom:none">
-      <div class="form-block-label">Need Help Figuring This Out?</div>
-      <div class="assist-panel">
-        <div class="assist-head">
-          <div class="dot">A</div>
-          <div><strong>Talk to Claude</strong><br><span>Helps translate this brief into sourcing criteria</span></div>
-        </div>
-        <div class="assist-bubble">Tell me about the program in your own words — who you're trying to reach, what's worked before, any creators you already love — and I'll turn it into sourcing filters and suggested archetypes for you.</div>
-        <div class="assist-input-row">
-          <input type="text" placeholder="e.g. We want creators who feel like a friend recommending us, not an ad...">
-          <button class="assist-send" type="button">Send</button>
-        </div>
-        <div class="assist-note">This also pre-fills your Sourcing criteria on the next step.</div>
       </div>
     </div>
 
@@ -90,6 +84,28 @@
 <script>
 document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "index.html" });
 document.getElementById("footer").innerHTML = renderFooter();
+
+// Dual-handle follower-size slider — steps map to real follower tiers rather
+// than a linear 0–100 scale, since the gap between e.g. 1M and 5M matters a
+// lot less granularly than the gap between 1k and 25k.
+const FOLLOWER_SCALE = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
+function followerLabel(pct, isMax) {
+  const idx = Math.round((pct / 100) * (FOLLOWER_SCALE.length - 1));
+  const v = FOLLOWER_SCALE[idx];
+  const label = v >= 1000000 ? (v / 1000000) + "M" : (v / 1000) + "K";
+  return (isMax && idx === FOLLOWER_SCALE.length - 1) ? label + "+" : label;
+}
+const fMin = document.getElementById("follower-min");
+const fMax = document.getElementById("follower-max");
+function updateFollowerSlider() {
+  document.getElementById("follower-fill").style.left = fMin.value + "%";
+  document.getElementById("follower-fill").style.width = (fMax.value - fMin.value) + "%";
+  document.getElementById("follower-min-label").textContent = followerLabel(+fMin.value, false);
+  document.getElementById("follower-max-label").textContent = followerLabel(+fMax.value, true);
+}
+fMin.addEventListener("input", () => { if (+fMin.value > +fMax.value) fMin.value = fMax.value; updateFollowerSlider(); });
+fMax.addEventListener("input", () => { if (+fMax.value < +fMin.value) fMax.value = fMin.value; updateFollowerSlider(); });
+updateFollowerSlider();
 </script>
 </body>
 </html>
