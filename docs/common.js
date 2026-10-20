@@ -37,8 +37,8 @@ function renderHeader({ onDark = true, back = null } = {}) {
   return `
     <header class="site-header ${onDark ? "on-dark" : ""}">
       ${back
-        ? `<a class="back-link" href="${back}">&larr; a8i</a>`
-        : `<a class="brand-mark" href="process.html"><span class="dot">A</span><span class="mark">AGENCY&nbsp;EIGHT &middot; a8i</span></a>`
+        ? `<a class="back-link" href="${back}">&larr; A8I</a>`
+        : `<a class="brand-mark" href="process.html"><img class="logo-mark" src="assets/icon-red.png" alt="Agency Eight"><span class="mark">AGENCY&nbsp;EIGHT &middot; A8I</span></a>`
       }
       <nav class="header-nav">
         <a href="process.html">Process</a>
@@ -58,5 +58,5 @@ function getSessionId() {
 }
 
 function renderFooter() {
-  return `<footer class="site-footer">&copy; 2026 Agency Eight. a8i is built on the same system behind Agency Eight's full-service gifting programs.</footer>`;
+  return `<footer class="site-footer">&copy; 2026 Agency Eight. A8I is built on the same system behind Agency Eight's full-service gifting programs.</footer>`;
 }
