@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>a8i — Our Process</title>
+<link rel="icon" href="assets/icon-red.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="brand">
+      <img src="assets/logo-horizontal-red.png" alt="Agency 8">
+      <div class="tag">a8i — Our Process</div>
+    </div>
+    <div class="nav-group-label">Process</div>
+    <div id="nav-steps"></div>
+    <div class="nav-group-label">Open Questions</div>
+    <div id="nav-bq"></div>
+  </nav>
+
+  <main class="main" id="main"></main>
+</div>
+
+<script>
+// ── Process data ─────────────────────────────────────────────────────────
+// Transcribed from the "Our Process" / "Big Questions" Notion page as of the
+// 2026-10-20 working session. This is a rough visual skeleton, not a build —
+// each step's content mirrors the live outline; expand per-step once that
+// step is actually scoped.
+const STEPS = [
+  { id: "signing", num: 1, title: "Signing", note: "Contract signed — kicks everything else off.", items: [] },
+
+  { id: "onboarding", num: 2, title: "Onboarding", items: [
+    { text: "Briefing", children: [
+      { text: "Intake form:", children: [
+        { text: "What are the goals and KPIs of the program?" },
+        { text: "What are the monthly gifting goals?" },
+        { text: "Archetypes / demographics" },
+        { text: "Restrictions", children: [
+          { text: "Location" }, { text: "Size" }, { text: "Gender" }, { text: "Age" },
+        ]},
+      ]},
+    ]},
+    { text: "Building assets", children: [
+      { text: "List", children: [
+        { text: "Parameters — check filtering options on database", children: [
+          { text: "Are we doing only emails?", question: true },
+        ]},
+      ]},
+      { text: "Copy", children: [{ text: "Emmett's copy website" }] },
+      { text: "Brief", children: [
+        { text: "Claude design — Emmett's website", children: [{ text: "Powered by Claude" }] },
+      ]},
+    ]},
+  ]},
+
+  { id: "sourcing", num: 3, title: "Sourcing", items: [
+    { text: "Database" },
+    { text: "Vetting" },
+    { text: "AI overviews / summaries of an account", annotation: "MCT", children: [
+      { text: "Suggested prompts based on the description" },
+      { text: "Persona" },
+      { text: "Example profiles" },
+    ]},
+  ]},
+
+  { id: "gift-app", num: 4, title: "Gift App", items: [
+    { text: "Build into system", children: [
+      { text: "Don't want to use Fillout — want our own thing" },
+    ]},
+    { text: "Draft 1 — minimal gift choice? No choice?", question: true },
+  ]},
+
+  { id: "outreach", num: 5, title: "Outreach", items: [
+    { text: "Our own Mail Meteor", annotation: "MCT" },
+  ]},
+
+  { id: "tracking-progress", num: 6, title: "Tracking Influencer Progress", status: "focus",
+    note: "Loulou's pick for where Emmett anchors first — the step that represents tracking the whole process.",
+    items: [
+      { text: "All based on dates — statuses change automatically" },
+      { text: "Can users change statuses to be specific to them?", question: true },
+    ]},
+
+  { id: "cleaning", num: 7, title: "Cleaning Gift App", items: [
+    { text: "Clean no-matches automatically", children: [
+      { text: "Vetting true no-matches?", question: true },
+      { text: "Unique links so they can't dupe or leak the app?", annotation: "MCT", question: true },
+    ]},
+    { text: "Dupes?", question: true },
+    { text: "How do we handle regifts?", question: true },
+  ]},
+
+  { id: "placing-orders", num: 8, title: "Placing Orders", items: [
+    { text: "Shopify connection" },
+    { text: "What if you don't use Shopify?", children: [{ text: "Generate CSV" }] },
+    { text: "What about the complex Shopifys?", question: true },
+  ]},
+
+  { id: "sending-brief", num: 9, title: "Sending Brief", items: [
+    { text: "Auto with dates" },
+  ]},
+
+  { id: "tracking-content", num: 10, title: "Tracking Content", status: "later",
+    note: "Flagged lower priority for now — mostly a business/partnership question, not a build question yet.",
+    items: [
+      { text: "Our own Archive?", children: [
+        { text: "Powered by Archive", children: [
+          { text: "Our own Archive doesn't give them access to their own workspace" },
+        ]},
+        { text: "Referral + connecting to the system?" },
+        { text: "Basic internal version of Archive" },
+      ]},
+      { text: "Do we work with Archive?", question: true },
+    ]},
+
+  { id: "reporting", num: 11, title: "Reporting", items: [
+    { text: "Dashboard, like Magna" },
+  ]},
+];
+
+const BIG_QUESTIONS = [
+  { q: "Who is our help desk?", sub: "Support team" },
+  { q: "With so much being automatic, what if people want human intervention? Do we add a step where a human always has to click it?",
+    sub: "Briefs. Custom briefs. No briefs. Customized processes?" },
+  { q: "If there are Claude integrations, how do we charge and give access to that?" },
+  { q: "How do we let this be not as good as humans?",
+    sub: "When do they want to upgrade into full A8? Pricing would be the reason to upgrade — or is there something else?" },
+];
+
+// ── Rendering ─────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+function renderOutline(items) {
+  if (!items || !items.length) return "";
+  return `<ol class="outline">` + items.map(item => `
+    <li class="outline-branch">
+      <div class="leaf${item.question ? " q" : ""}">
+        <span>${escHtml(item.text)}</span>
+        ${item.annotation ? `<span class="annotation"><span class="avatar">${escHtml(item.annotation[0])}</span>${escHtml(item.annotation)}</span>` : ""}
+      </div>
+      ${renderOutline(item.children)}
+    </li>
+  `).join("") + `</ol>`;
+}
+
+function renderStepNav() {
+  document.getElementById("nav-steps").innerHTML = STEPS.map(s => `
+    <button class="nav-item" data-id="${s.id}">
+      <span class="num">${s.num}</span>
+      <span>${escHtml(s.title)}</span>
+      ${s.status === "focus" ? `<span class="nav-badge focus">Focus</span>` : ""}
+      ${s.status === "later" ? `<span class="nav-badge later">Later</span>` : ""}
+    </button>
+  `).join("");
+}
+
+function renderBqNav() {
+  document.getElementById("nav-bq").innerHTML = `<button class="nav-item" data-id="big-questions"><span class="num">?</span><span>Big Questions</span></button>`;
+}
+
+function renderStep(step) {
+  document.getElementById("main").innerHTML = `
+    <div class="step-eyebrow">
+      Our Process
+      ${step.status === "focus" ? `<span class="status-pill focus"><span class="dot"></span>Current focus</span>` : ""}
+      ${step.status === "later" ? `<span class="status-pill later">Deprioritized</span>` : ""}
+    </div>
+    <h1 class="step-title"><span class="num">${String(step.num).padStart(2,"0")}</span>${escHtml(step.title)}</h1>
+    ${step.note ? `<p class="step-note">${escHtml(step.note)}</p>` : `<div style="margin-bottom:44px"></div>`}
+    ${step.items.length ? renderOutline(step.items) : `<p class="leaf" style="color:var(--dimmer)">Nothing scoped here yet.</p>`}
+    <p class="foot-note">Rough visual skeleton as of the 2026-10-20 working session — content mirrors the live "Our Process" Notion page. Not a functional build yet.</p>
+  `;
+}
+
+function renderBigQuestions() {
+  document.getElementById("main").innerHTML = `
+    <div class="step-eyebrow">a8i</div>
+    <h1 class="step-title">Big Questions</h1>
+    <p class="step-note">Strategic open questions, separate from the step-by-step build — mostly Loulou/Aurielle's to work through, not scoped as build tasks yet.</p>
+    <ol class="bq-list">
+      ${BIG_QUESTIONS.map(b => `
+        <li class="bq-item">
+          <p>${escHtml(b.q)}</p>
+          ${b.sub ? `<div class="sub">${escHtml(b.sub)}</div>` : ""}
+        </li>
+      `).join("")}
+    </ol>
+  `;
+}
+
+function setActive(id) {
+  document.querySelectorAll(".nav-item").forEach(el => el.classList.toggle("active", el.dataset.id === id));
+  if (id === "big-questions") { renderBigQuestions(); return; }
+  const step = STEPS.find(s => s.id === id);
+  if (step) renderStep(step);
+}
+
+renderStepNav();
+renderBqNav();
+document.querySelectorAll(".nav-item").forEach(el => el.addEventListener("click", () => setActive(el.dataset.id)));
+
+// Land on the step Loulou flagged as Emmett's current focus.
+setActive(STEPS.find(s => s.status === "focus")?.id || STEPS[0].id);
+</script>
+</body>
+</html>
