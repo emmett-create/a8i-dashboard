@@ -117,18 +117,54 @@ fMin.addEventListener("input", () => { if (+fMin.value > +fMax.value) fMin.value
 fMax.addEventListener("input", () => { if (+fMax.value < +fMin.value) fMax.value = fMin.value; updateFollowerSlider(); });
 updateFollowerSlider();
 
-// Not wired up to a real model yet — there's no creator database to match
-// against until that's connected. This just acknowledges the input so the
-// flow feels real; the actual parsing/matching comes once Sourcing has
-// something to search.
+// Calls the real sourcing-matching API — pools 3 real client Master Lists
+// (Feals, Tilt Beauty, BORNTOSTANDOUT; 14,491 creators total) as a stand-in
+// test "creator database." Matching is plain keyword/range logic, not AI —
+// see a8i-sourcing-api's app.py for why that's deliberate right now.
+const API_BASE = "https://a8i-dashboard.onrender.com";
+
+function followerCountFromPct(pct) {
+  const idx = Math.round((pct / 100) * (FOLLOWER_SCALE.length - 1));
+  return FOLLOWER_SCALE[idx];
+}
+
 const assistInput = document.getElementById("assist-input");
 const assistReply = document.getElementById("assist-reply");
-function sendAssist() {
+const assistSend = document.getElementById("assist-send");
+
+async function sendAssist() {
   if (!assistInput.value.trim()) return;
-  assistReply.textContent = "Noted — this will help shape your Sourcing list once the creator database is connected.";
+  assistSend.disabled = true;
+  assistReply.textContent = "Checking against the test creator database — this can take up to a minute if it's been idle…";
   assistReply.classList.remove("hidden");
+
+  const criteria = {
+    description: assistInput.value.trim(),
+    location: document.getElementById("f-location").value.trim(),
+    gender: document.getElementById("f-gender").value.trim(),
+    age: document.getElementById("f-age").value.trim(),
+    follower_min: followerCountFromPct(+fMin.value),
+    follower_max: followerCountFromPct(+fMax.value),
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/match`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(criteria),
+    });
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    const data = await res.json();
+    assistReply.textContent =
+      `${data.matched.toLocaleString()} confident match${data.matched === 1 ? "" : "es"} out of ${data.total.toLocaleString()} test creators ` +
+      `(plus ${data.partial.toLocaleString()} partial — missing data on one field, like location or age).`;
+  } catch (e) {
+    assistReply.textContent = `Couldn't reach the test database (${e.message}). It may still be waking up — try again in a moment.`;
+  } finally {
+    assistSend.disabled = false;
+  }
 }
-document.getElementById("assist-send").addEventListener("click", sendAssist);
+assistSend.addEventListener("click", sendAssist);
 assistInput.addEventListener("keydown", e => { if (e.key === "Enter") sendAssist(); });
 </script>
 </body>
