@@ -48,7 +48,7 @@ document.getElementById("footer").innerHTML = renderFooter();
 const lastAlone = AREAS.length % 3 === 1;
 document.getElementById("card-grid").innerHTML = AREAS.map((a, i) => `
   <a class="area-card${(lastAlone && i === AREAS.length - 1) ? " span-full" : ""}" href="${a.id}.html">
-    <span class="card-num">${String(a.num).padStart(2,"0")}</span>
+    <img class="card-mark" src="assets/icon-red.png" alt="">
     <h3>${escHtml(a.title)}</h3>
     <span class="arrow">&rarr;</span>
   </a>
