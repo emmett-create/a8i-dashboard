@@ -23,15 +23,15 @@ MASTER_LIST_TAB = "Master List"
 CLIENT_SHEETS = {
     "Feals": {
         "sheet_id": "1x7OyNUkQS8lWvz-jRMlCC99fvROX-B7tDeuGG5PiwvM",
-        "columns": {"name": 1, "ig_handle": 3, "followers": 7, "gender": 8, "vertical": 9, "location": 10, "age": 11},
+        "columns": {"name": 1, "ig_handle": 3, "tt_handle": 5, "followers": 7, "gender": 8, "vertical": 9, "location": 10, "age": 11},
     },
     "Tilt Beauty": {
         "sheet_id": "1PyowbTWyAZ_k86bGBtexotoExcqWmUQgYJloTSUZBC0",
-        "columns": {"name": 3, "ig_handle": 5, "followers": 9, "gender": 10, "vertical": 11, "location": 12, "age": 13},
+        "columns": {"name": 3, "ig_handle": 5, "tt_handle": 7, "followers": 9, "gender": 10, "vertical": 11, "location": 12, "age": 13},
     },
     "BORNTOSTANDOUT": {
         "sheet_id": "1nsRCoRK9hdbH50rMD9zqp-GGwTpPyEAFWT69_pjVEbg",
-        "columns": {"name": 1, "ig_handle": 3, "followers": 7, "gender": 8, "vertical": 9, "archetype": 10},
+        "columns": {"name": 1, "ig_handle": 3, "tt_handle": 5, "followers": 7, "gender": 8, "vertical": 9, "archetype": 10},
     },
 }
 

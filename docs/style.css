@@ -239,29 +239,44 @@ a.btn[aria-disabled="true"] { opacity: .4; pointer-events: none; cursor: not-all
 .brief-item .remove { color: var(--red); cursor: pointer; font-weight: 700; background: none; border: none; font-size: 14px; line-height: 1; }
 .brief-item.uploading { opacity: .55; }
 
-/* ── Sourcing review list ───────────────────────────────────────────── */
+/* ── Sourcing review table ──────────────────────────────────────────── */
 .review-summary { font-size: 14px; color: var(--dim); margin-bottom: 10px; }
-.review-tally { display: flex; gap: 24px; font-size: 13px; font-weight: 700; margin-bottom: 36px; }
+.review-tally { display: flex; gap: 24px; font-size: 13px; font-weight: 700; margin-bottom: 20px; }
 .review-tally .approved { color: #1a7a1a; }
 .review-tally .disapproved { color: var(--red); }
 .review-tally .pending { color: var(--dim); }
 
-.creator-section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--red); margin: 36px 0 10px; }
-.creator-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-.creator-row .info { min-width: 0; }
-.creator-row .info a.c-name { font-weight: 700; color: var(--black); text-decoration: none; font-size: 15px; }
-.creator-row .info a.c-name:hover { color: var(--red); }
-.creator-row .info span.c-name { font-weight: 700; font-size: 15px; }
-.creator-row .meta { font-size: 12px; color: var(--dim); margin-top: 3px; }
-.creator-row .right { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
-.creator-row .followers { font-weight: 700; white-space: nowrap; font-size: 13.5px; }
-.yn-buttons { display: flex; gap: 8px; }
-.yn-btn { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--white); font-weight: 700; font-size: 13px; cursor: pointer; transition: all .1s ease; }
+.src-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.src-toolbar input[type=search], .src-toolbar select {
+  font-family: var(--display); font-size: 13px; padding: 9px 12px; border: 1.5px solid var(--line);
+  border-radius: 8px; background: var(--white); color: var(--black); outline: none;
+}
+.src-toolbar input[type=search] { min-width: 220px; flex: 1 1 220px; }
+.src-toolbar input[type=search]:focus, .src-toolbar select:focus { border-color: var(--red); }
+.src-shown-count { font-size: 12px; color: var(--dim); margin: 0 0 10px; }
+
+.src-table-wrap { background: var(--white); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; margin-bottom: 40px; }
+table.src-table { border-collapse: collapse; width: 100%; font-size: 13px; white-space: nowrap; }
+.src-table th, .src-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; }
+.src-table thead th {
+  background: var(--ivory); font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .05em;
+  color: var(--dim); cursor: pointer; user-select: none; white-space: nowrap;
+}
+.src-table thead th.no-sort { cursor: default; }
+.src-table thead th .sort-icon { color: var(--red); }
+.src-table tbody tr:hover { background: var(--ivory); }
+.src-table tbody tr.decided-no { opacity: .4; }
+.src-table td.name-cell { font-weight: 700; color: var(--black); }
+.src-table a.plat-link { color: var(--red); text-decoration: none; font-weight: 600; }
+.src-table a.plat-link:hover { text-decoration: underline; }
+.src-table .dim { color: var(--dim); }
+.src-table .yn-cell { display: flex; gap: 6px; }
+
+.yn-btn { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--white); font-weight: 700; font-size: 12px; cursor: pointer; transition: all .1s ease; flex-shrink: 0; }
 .yn-btn.yes { color: #1a7a1a; }
 .yn-btn.no { color: var(--red); }
 .yn-btn.yes.active { background: #1a7a1a; color: var(--white); border-color: #1a7a1a; }
 .yn-btn.no.active { background: var(--red); color: var(--white); border-color: var(--red); }
-.creator-row.decided-no { opacity: .4; }
 
 .empty-state { text-align: center; padding: 60px 20px; color: var(--dim); }
 .empty-state a { color: var(--red); font-weight: 700; }

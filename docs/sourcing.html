@@ -17,7 +17,7 @@
   </div>
 </section>
 
-<section class="section" style="padding-top:60px;max-width:860px">
+<section class="section" style="padding-top:60px;max-width:1200px">
   <div id="content"></div>
 </section>
 
@@ -27,15 +27,9 @@
 document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "index.html" });
 document.getElementById("footer").innerHTML = renderFooter();
 
-const API_BASE = "https://a8i-dashboard.onrender.com";
 const DECISIONS_KEY = "a8i_creator_decisions";
-
-function loadDecisions() {
-  try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; }
-}
-function saveDecisions(d) {
-  localStorage.setItem(DECISIONS_KEY, JSON.stringify(d));
-}
+function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
+function saveDecisions(d) { localStorage.setItem(DECISIONS_KEY, JSON.stringify(d)); }
 let decisions = loadDecisions();
 
 function fmtFollowers(n) {
@@ -44,59 +38,8 @@ function fmtFollowers(n) {
   if (n >= 1000) return Math.round(n / 1000) + "K";
   return String(n);
 }
-
-function metaLine(c) {
-  return [c.vertical, c.location, c.age, c.gender, c.client].filter(Boolean).join(" &middot; ");
-}
-
-function creatorRow(c) {
-  const nameHtml = c.ig_url
-    ? `<a class="c-name" href="${escHtml(c.ig_url)}" target="_blank" rel="noopener">${escHtml(c.name)}</a>`
-    : `<span class="c-name">${escHtml(c.name)}</span>`;
-  const current = decisions[c.id];
-  return `
-    <div class="creator-row${current === "no" ? " decided-no" : ""}" data-id="${escHtml(c.id)}">
-      <div class="info">
-        ${nameHtml}
-        <div class="meta">${metaLine(c)}</div>
-      </div>
-      <div class="right">
-        <div class="followers">${fmtFollowers(c.followers)}</div>
-        <div class="yn-buttons">
-          <button class="yn-btn yes${current === "yes" ? " active" : ""}" type="button" data-vote="yes">Y</button>
-          <button class="yn-btn no${current === "no" ? " active" : ""}" type="button" data-vote="no">N</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function updateTally(allCreators) {
-  let approved = 0, disapproved = 0;
-  allCreators.forEach(c => {
-    if (decisions[c.id] === "yes") approved++;
-    else if (decisions[c.id] === "no") disapproved++;
-  });
-  const pending = allCreators.length - approved - disapproved;
-  document.getElementById("tally").innerHTML =
-    `<span class="approved">${approved} approved</span><span class="disapproved">${disapproved} disapproved</span><span class="pending">${pending} pending</span>`;
-}
-
-function wireVotes(container, allCreators) {
-  container.querySelectorAll(".yn-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const row = btn.closest(".creator-row");
-      const id = row.dataset.id;
-      const vote = btn.dataset.vote;
-      decisions[id] = decisions[id] === vote ? undefined : vote; // click again to clear
-      if (decisions[id] === undefined) delete decisions[id];
-      saveDecisions(decisions);
-      row.querySelectorAll(".yn-btn").forEach(b => b.classList.remove("active"));
-      if (decisions[id]) btn.classList.add("active");
-      row.classList.toggle("decided-no", decisions[id] === "no");
-      updateTally(allCreators);
-    });
-  });
+function platLink(url, label) {
+  return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
 }
 
 const saved = localStorage.getItem("a8i_match_result");
@@ -111,8 +54,8 @@ if (!saved) {
   `;
 } else {
   const { criteria, data } = JSON.parse(saved);
-  const matched = data.matched_creators || [];
-  const partial = data.partial_creators || [];
+  const matched = (data.matched_creators || []).map(c => ({ ...c, bucket: "matched" }));
+  const partial = (data.partial_creators || []).map(c => ({ ...c, bucket: "partial" }));
   const allCreators = [...matched, ...partial];
 
   content.innerHTML = `
@@ -120,15 +63,152 @@ if (!saved) {
       ${data.matched.toLocaleString()} confident match${data.matched === 1 ? "" : "es"}, ${data.partial.toLocaleString()} partial, out of ${data.total.toLocaleString()} test creators.</p>
     <div class="review-tally" id="tally"></div>
 
-    <div class="creator-section-label">Confident Matches (${matched.length} shown)</div>
-    <div id="matched-list">${matched.length ? matched.map(creatorRow).join("") : `<p class="meta">None found.</p>`}</div>
+    <div class="src-toolbar">
+      <input type="search" id="src-search" placeholder="Search name or handle…">
+      <select id="src-filter-bucket">
+        <option value="">All (matched + needs review)</option>
+        <option value="matched">Confident Matches</option>
+        <option value="partial">Needs Review</option>
+      </select>
+      <select id="src-filter-client"><option value="">All clients</option></select>
+      <select id="src-filter-gender"><option value="">All genders</option></select>
+      <select id="src-filter-vote">
+        <option value="">All (any vote status)</option>
+        <option value="pending">Pending only</option>
+        <option value="yes">Approved only</option>
+        <option value="no">Disapproved only</option>
+      </select>
+    </div>
+    <p class="src-shown-count" id="shown-count"></p>
 
-    <div class="creator-section-label">Needs Review — missing some data (${partial.length} shown)</div>
-    <div id="partial-list">${partial.length ? partial.map(creatorRow).join("") : `<p class="meta">None found.</p>`}</div>
+    <div class="src-table-wrap">
+      <table class="src-table">
+        <thead>
+          <tr>
+            <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+            <th class="no-sort">Instagram</th>
+            <th class="no-sort">TikTok</th>
+            <th class="sort" data-col="followers">Followers <span class="sort-icon"></span></th>
+            <th class="sort" data-col="vertical">Vertical <span class="sort-icon"></span></th>
+            <th class="sort" data-col="location">Location <span class="sort-icon"></span></th>
+            <th class="sort" data-col="age">Age <span class="sort-icon"></span></th>
+            <th class="sort" data-col="gender">Gender <span class="sort-icon"></span></th>
+            <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+            <th class="sort" data-col="bucket">Status <span class="sort-icon"></span></th>
+            <th class="no-sort">Approve</th>
+          </tr>
+        </thead>
+        <tbody id="src-tbody"></tbody>
+      </table>
+    </div>
   `;
-  updateTally(allCreators);
-  wireVotes(document.getElementById("matched-list"), allCreators);
-  wireVotes(document.getElementById("partial-list"), allCreators);
+
+  // ── Dynamically populate filters from the actual data ─────────────────────
+  const clientSel = document.getElementById("src-filter-client");
+  [...new Set(allCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
+    clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+  const genderSel = document.getElementById("src-filter-gender");
+  [...new Set(allCreators.map(c => c.gender).filter(Boolean))].sort().forEach(v => {
+    genderSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+
+  let sortCol = "followers", sortDir = "desc";
+
+  function updateTally() {
+    let approved = 0, disapproved = 0;
+    allCreators.forEach(c => {
+      if (decisions[c.id] === "yes") approved++;
+      else if (decisions[c.id] === "no") disapproved++;
+    });
+    const pending = allCreators.length - approved - disapproved;
+    document.getElementById("tally").innerHTML =
+      `<span class="approved">${approved} approved</span><span class="disapproved">${disapproved} disapproved</span><span class="pending">${pending} pending</span>`;
+  }
+
+  function render() {
+    const q = document.getElementById("src-search").value.trim().toLowerCase();
+    const bucketFilter = document.getElementById("src-filter-bucket").value;
+    const clientFilter = document.getElementById("src-filter-client").value;
+    const genderFilter = document.getElementById("src-filter-gender").value;
+    const voteFilter = document.getElementById("src-filter-vote").value;
+
+    let rows = allCreators.filter(c => {
+      if (bucketFilter && c.bucket !== bucketFilter) return false;
+      if (clientFilter && c.client !== clientFilter) return false;
+      if (genderFilter && c.gender !== genderFilter) return false;
+      const vote = decisions[c.id] || "pending";
+      if (voteFilter && vote !== voteFilter) return false;
+      if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (sortCol === "followers") { av = av || 0; bv = bv || 0; }
+      else { av = (av || "").toString().toLowerCase(); bv = (bv || "").toString().toLowerCase(); }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${allCreators.length.toLocaleString()} loaded`;
+
+    document.getElementById("src-tbody").innerHTML = rows.length ? rows.map(c => {
+      const vote = decisions[c.id];
+      return `
+        <tr data-id="${escHtml(c.id)}" class="${vote === "no" ? "decided-no" : ""}">
+          <td class="name-cell">${escHtml(c.name)}</td>
+          <td>${platLink(c.ig_url, c.ig_handle ? "@" + c.ig_handle : "")}</td>
+          <td>${platLink(c.tt_url, c.tt_handle ? "@" + c.tt_handle : "")}</td>
+          <td>${fmtFollowers(c.followers)}</td>
+          <td>${c.vertical ? escHtml(c.vertical) : `<span class="dim">—</span>`}</td>
+          <td>${c.location ? escHtml(c.location) : `<span class="dim">—</span>`}</td>
+          <td>${c.age ? escHtml(c.age) : `<span class="dim">—</span>`}</td>
+          <td>${c.gender ? escHtml(c.gender) : `<span class="dim">—</span>`}</td>
+          <td>${escHtml(c.client)}</td>
+          <td>${c.bucket === "matched" ? "Match" : "Needs review"}</td>
+          <td>
+            <div class="yn-cell">
+              <button class="yn-btn yes${vote === "yes" ? " active" : ""}" type="button" data-vote="yes">Y</button>
+              <button class="yn-btn no${vote === "no" ? " active" : ""}" type="button" data-vote="no">N</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+
+    document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
+    const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
+    if (activeTh) activeTh.textContent = sortDir === "asc" ? " ↑" : " ↓";
+
+    document.querySelectorAll(".yn-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest("tr");
+        const id = row.dataset.id;
+        const vote = btn.dataset.vote;
+        if (decisions[id] === vote) delete decisions[id]; else decisions[id] = vote;
+        saveDecisions(decisions);
+        updateTally();
+        render();
+      });
+    });
+  }
+
+  document.querySelectorAll(".src-table th.sort").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = col === "followers" ? "desc" : "asc"; }
+      render();
+    });
+  });
+  ["src-search", "src-filter-bucket", "src-filter-client", "src-filter-gender", "src-filter-vote"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  updateTally();
+  render();
 }
 </script>
 </body>

@@ -69,12 +69,15 @@ def fetch_pool(force: bool = False) -> list:
             if not name:
                 continue
             ig_handle = _cell(r, cols.get("ig_handle")).lstrip("@")
+            tt_handle = _cell(r, cols.get("tt_handle")).lstrip("@")
             creators.append({
                 "id": f"{client_name}::{i}",
                 "client": client_name,
                 "name": name,
                 "ig_handle": ig_handle,
                 "ig_url": f"https://instagram.com/{ig_handle}" if ig_handle else None,
+                "tt_handle": tt_handle,
+                "tt_url": f"https://tiktok.com/@{tt_handle}" if tt_handle else None,
                 "followers": _to_int(_cell(r, cols.get("followers"))),
                 "gender": _cell(r, cols.get("gender")) or None,
                 "vertical": _cell(r, cols.get("vertical")) or None,
