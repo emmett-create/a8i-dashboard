@@ -126,34 +126,52 @@ def location_matches(filter_text: str, value):
         return "match"
     return "match" if (f_words & v_words) else "no_match"
 
-GENDER_TERMS = ["female", "male", "non-binary", "nonbinary", "woman", "women", "man", "men", "couple"]
+# Maps every term we might see in free text to one canonical bucket, then
+# checks that bucket (not the raw term) against the creator's value — doing
+# this with plain substring checks is a trap: "men" is literally a substring
+# of "women", and "male" a substring of "female", so naive `in` matching
+# treated almost every real "Female" value as also matching a "men" filter.
+# _term_in uses word-boundary regex instead, so "female" with no boundary
+# before "male" correctly does NOT match a bare \bmale\b search.
+GENDER_SYNONYMS = {
+    "female": "female", "woman": "female", "women": "female",
+    "male": "male", "man": "male", "men": "male",
+    "non-binary": "non-binary", "nonbinary": "non-binary",
+    "couple": "couple",
+}
+
+def _term_in(text: str, term: str) -> bool:
+    return re.search(rf"\b{re.escape(term)}\b", text) is not None
 
 def gender_matches(filter_text: str, value):
     ft = (filter_text or "").lower()
-    terms = [t for t in GENDER_TERMS if t in ft]
-    if not terms or "any" in ft:
+    if "any" in ft:
+        return "match"
+    buckets = {canon for term, canon in GENDER_SYNONYMS.items() if _term_in(ft, term)}
+    if not buckets:
         return "match"
     if not value:
         return "unknown"
     v = value.lower()
-    return "match" if any(t in v for t in terms) else "no_match"
+    return "match" if any(_term_in(v, b) for b in buckets) else "no_match"
 
 def _parse_age_range(text: str):
     if not text:
         return None
-    text = text.strip()
-    if text.startswith("<"):
-        nums = re.findall(r"\d+", text)
-        return (0, int(nums[0])) if nums else None
-    if text.endswith("+"):
-        nums = re.findall(r"\d+", text)
-        return (int(nums[0]), 120) if nums else None
+    text = text.strip().lower()
     nums = [int(n) for n in re.findall(r"\d+", text)]
+    if not nums:
+        return None
+    # "under 30" / "below 30" / "younger than 30" — not just the "<30" symbol
+    # form the sheet data itself uses. Missing this meant a free-text age
+    # filter like "women under 30" was parsed as exactly age 30, not a range.
+    if text.startswith("<") or re.search(r"\b(under|below|younger)\b", text):
+        return (0, nums[0])
+    if text.endswith("+") or re.search(r"\b(over|above|older)\b", text):
+        return (nums[0], 120)
     if len(nums) >= 2:
         return (min(nums[0], nums[1]), max(nums[0], nums[1]))
-    if len(nums) == 1:
-        return (nums[0], nums[0])
-    return None
+    return (nums[0], nums[0])
 
 def age_matches(filter_text: str, value):
     f_range = _parse_age_range(filter_text)
