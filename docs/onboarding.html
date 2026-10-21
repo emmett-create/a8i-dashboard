@@ -30,6 +30,11 @@
         <input type="number" id="f-monthly" placeholder="e.g. 50">
         <div class="hint">How many creators you'd like gifted per month.</div>
       </div>
+      <div class="field">
+        <label for="f-product">What product(s) are you gifting?</label>
+        <textarea id="f-product" placeholder="e.g. our Hero Serum (full-size) and a travel-size Cleanser — $68 retail value"></textarea>
+        <div class="hint">Feeds the default product on each gift application in Gifting.</div>
+      </div>
     </div>
 
     <div class="form-block">
@@ -282,6 +287,7 @@ async function sendAssist() {
     age: ageField.value.trim(),
     follower_min: followerCountFromPct(+fMin.value),
     follower_max: followerCountFromPct(+fMax.value),
+    product: document.getElementById("f-product").value.trim(),
   };
 
   try {

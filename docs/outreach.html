@@ -11,25 +11,463 @@
 <section class="hero" style="padding-bottom:40px">
 <div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
-    <div class="eyebrow">A8I Process &middot; 04</div>
+    <div class="eyebrow">A8I &middot; 04</div>
     <h1>Outreach</h1>
   </div>
 </section>
-<section class="section" style="padding-top:60px">
-  <div id="rows"></div>
-</section>
-<div id="footer"></div>
 
+<section class="section src-section" style="padding-top:60px">
+  <div class="src-tabs" id="src-tabs">
+    <button class="src-tab active" data-tab="tracking" type="button">Tracking</button>
+    <button class="src-tab" data-tab="copy" type="button">Outreach Copy</button>
+  </div>
+  <div id="content"></div>
+</section>
+
+<div class="overlay hidden" id="key-overlay">
+  <div class="modal-card">
+    <h3>One-time setup</h3>
+    <p>Generating outreach copy needs an Anthropic API key. It's stored only in this browser — never sent anywhere except directly to Anthropic.</p>
+    <input type="password" id="key-input" placeholder="sk-ant-...">
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="key-cancel">Cancel</button>
+      <button class="btn btn-solid" type="button" id="key-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="footer"></div>
 <script src="common.js"></script>
+
+<script type="module">
+// pdf.js — extracts real text from each uploaded PDF client-side (same
+// pattern as Onboarding's brand-materials upload).
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.4.299/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.4.299/pdf.worker.min.mjs";
+
+window.extractPdfText = async function extractPdfText(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(" ") + "\n";
+  }
+  return text;
+};
+</script>
+
 <script>
-const ROWS = [
-  { num: 1, title: "Outreach", items: [
-    { text: "Our own Mail Meteor", annotation: "MCT" },
-  ]},
-];
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
-document.getElementById("rows").innerHTML = renderRowList(ROWS);
+
+const KNOWN_KEY = "a8i_known_creators";
+const DECISIONS_KEY = "a8i_creator_decisions";
+const TRACKING_KEY = "a8i_tracking_status";
+
+function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
+function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
+function loadTracking() { try { return JSON.parse(localStorage.getItem(TRACKING_KEY) || "{}"); } catch { return {}; } }
+function saveTracking(t) { localStorage.setItem(TRACKING_KEY, JSON.stringify(t)); }
+
+const OUTREACH_STAGES = ["Not started", "Sent", "Responded", "Confirmed", "Declined"];
+const GIFTING_STAGES = ["Not started", "Order placed", "Shipped", "Delivered"];
+const POSTING_STAGES = ["Not started", "Content due", "Posted", "Live"];
+
+function platLink(url, label) {
+  return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
+}
+function igCell(c) { return c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle) : `<span class="dim">—</span>`; }
+function ttCell(c) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle) : `<span class="dim">—</span>`; }
+function statusOptions(stages, current) {
+  return stages.map(s => `<option value="${escHtml(s)}"${s === current ? " selected" : ""}>${escHtml(s)}</option>`).join("");
+}
+function fmtUpdated(ts) {
+  if (!ts) return `<span class="dim">—</span>`;
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+const known = loadKnown();
+const decisions = loadDecisions();
+let tracking = loadTracking();
+const content = document.getElementById("content");
+const tabs = document.querySelectorAll(".src-tab");
+let activeTab = "tracking";
+
+tabs.forEach(btn => {
+  btn.addEventListener("click", () => {
+    activeTab = btn.dataset.tab;
+    tabs.forEach(b => b.classList.toggle("active", b === btn));
+    renderActiveTab();
+  });
+});
+
+function renderActiveTab() {
+  if (activeTab === "tracking") renderTrackingTab();
+  else renderCopyTab();
+}
+
+// ── Tab 1: Tracking (moved here from Sourcing — this is where progress on
+// an approved creator actually lives once sourcing is done) ──────────────
+function renderTrackingTab() {
+  const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
+
+  if (!approvedCreators.length) {
+    content.innerHTML = `
+      <div class="empty-state">
+        No creators approved yet.<br>
+        Head to Sourcing and start voting "Y" — approved creators show up here for status tracking.
+      </div>
+    `;
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="src-label">Status Tracker</div>
+    <p class="review-summary">Outreach, gifting, and posting status for every approved creator — update statuses as a program moves along.</p>
+    <div class="src-toolbar">
+      <input type="search" id="track-search" placeholder="Search name or handle…">
+      <select id="track-filter-client"><option value="">All clients</option></select>
+    </div>
+    <p class="src-shown-count" id="shown-count"></p>
+    <div class="src-table-wrap">
+      <table class="src-table track-table">
+        <thead>
+          <tr>
+            <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+            <th class="no-sort">Instagram</th>
+            <th class="no-sort">TikTok</th>
+            <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+            <th class="no-sort">Outreach</th>
+            <th class="no-sort">Gifting</th>
+            <th class="no-sort">Posting</th>
+            <th class="no-sort">Updated</th>
+          </tr>
+        </thead>
+        <tbody id="track-tbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  const clientSel = document.getElementById("track-filter-client");
+  [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
+    clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+
+  let sortCol = "name", sortDir = "asc";
+
+  function render() {
+    const q = document.getElementById("track-search").value.trim().toLowerCase();
+    const clientFilter = document.getElementById("track-filter-client").value;
+
+    let rows = approvedCreators.filter(c => {
+      if (clientFilter && c.client !== clientFilter) return false;
+      if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      let av = (a[sortCol] || "").toString().toLowerCase(), bv = (b[sortCol] || "").toString().toLowerCase();
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${approvedCreators.length.toLocaleString()} approved`;
+
+    document.getElementById("track-tbody").innerHTML = rows.length ? rows.map(c => {
+      const t = tracking[c.id] || {};
+      return `
+        <tr data-id="${escHtml(c.id)}">
+          <td class="name-cell">${escHtml(c.name)}</td>
+          <td>${igCell(c)}</td>
+          <td>${ttCell(c)}</td>
+          <td>${escHtml(c.client)}</td>
+          <td><select class="status-select" data-field="outreach">${statusOptions(OUTREACH_STAGES, t.outreach)}</select></td>
+          <td><select class="status-select" data-field="gifting">${statusOptions(GIFTING_STAGES, t.gifting)}</select></td>
+          <td><select class="status-select" data-field="posting">${statusOptions(POSTING_STAGES, t.posting)}</select></td>
+          <td class="updated-cell">${fmtUpdated(t.updatedAt)}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="8" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+
+    document.querySelectorAll(".status-select").forEach(sel => {
+      sel.addEventListener("change", () => {
+        const row = sel.closest("tr");
+        const id = row.dataset.id;
+        const field = sel.dataset.field;
+        tracking[id] = { ...(tracking[id] || {}), [field]: sel.value, updatedAt: Date.now() };
+        saveTracking(tracking);
+        row.querySelector(".updated-cell").innerHTML = fmtUpdated(tracking[id].updatedAt);
+      });
+    });
+  }
+
+  document.querySelectorAll(".src-table th.sort").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = "asc"; }
+      render();
+    });
+  });
+  ["track-search", "track-filter-client"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  render();
+}
+
+// ── Tab 2: Outreach Copy (ports the standalone outreach-brief-creator tool
+// into a8i — same prompt, same direct-to-Anthropic call, your own API key) ─
+const ANTHROPIC_KEY_STORAGE = "a8i_anthropic_key";
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_MODEL = "claude-sonnet-4-6";
+
+function getAnthropicKey() { return localStorage.getItem(ANTHROPIC_KEY_STORAGE) || ""; }
+function promptForAnthropicKey() {
+  return new Promise(resolve => {
+    const overlay = document.getElementById("key-overlay");
+    const input = document.getElementById("key-input");
+    input.value = "";
+    overlay.classList.remove("hidden");
+    input.focus();
+    const cleanup = (val) => { overlay.classList.add("hidden"); resolve(val); };
+    document.getElementById("key-save").onclick = () => {
+      const val = input.value.trim();
+      if (val) localStorage.setItem(ANTHROPIC_KEY_STORAGE, val);
+      cleanup(val);
+    };
+    document.getElementById("key-cancel").onclick = () => cleanup("");
+  });
+}
+async function callAnthropic(systemPrompt, userMessage, apiKey) {
+  const res = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 8000, system: systemPrompt, messages: [{ role: "user", content: userMessage }] }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Anthropic request failed (${res.status})`);
+  }
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+// Exact same 11-message structure as the standalone outreach-brief-creator
+// tool (docs/app.js there) — porting it in, not reinventing it.
+const OUTREACH_PROMPT = `You are an expert influencer outreach specialist for Agency Eight, an influencer marketing agency. Your job is to create a complete, professional influencer outreach campaign based on the brand materials provided.
+
+Read the provided materials carefully — they contain everything you need: brand voice, product details, target audience, tone, etc. Use them to generate highly customized, on-brand outreach copy.
+
+Generate exactly 11 messages in the following order. Separate each message with a line containing only "---" and start each with "## N. MESSAGE NAME" on its own line.
+
+THE 11 MESSAGES:
+
+## 1. INITIAL EMAIL OUTREACH
+Subject line format: [Gifting Opportunity] [Benefit/Hook] from [BRAND]
+- Greeting: "Hi [NAME],"
+- 1-2 sentence brand intro (only if the creator may not know the brand)
+- 2-3 sentences about the product with key benefits
+- "We've been loving your content and would love to gift you [PRODUCT] to experience and share your take with your audience."
+- Form link CTA (use provided form link or [INSERT FORM LINK])
+- Email signature: Name / Title / Agency Eight / Location
+
+## 2. EMAIL FOLLOW-UP #1 (3 days later)
+Subject: Re: [same subject]
+Brief friendly follow-up. Include form link. Email signature.
+
+## 3. INITIAL DM OUTREACH (no form link)
+Casual, concise. 2-3 sentences about product. End: "Let me know if you're interested and I can share next steps!"
+
+## 4. DM FOLLOW-UP #1 (3 days after initial DM)
+Brief follow-up. Include form link. Add: "If it's easier, feel free to send me your shipping and email info here."
+
+## 5. IF THEY AGREE
+"Amazing! Please fill out the form below..." Include form link.
+
+## 6. IF THEY DECLINE
+Gracious, warm. Keep door open for future campaigns.
+
+## 7. IF THEY ASK FOR PAID (NOT OFFERING PAID)
+Acknowledge interest. Explain gifting only. Still offer free gift. Include form link.
+
+## 8. IF THEY ASK FOR PAID (ARE OFFERING PAID)
+"We'd love to explore that! Feel free to reach out to [TEAM EMAIL] and someone from our team will be in touch."
+
+## 9. FOLLOW-UP #2 — FORM NOT FILLED
+"Hey [NAME]! We never got your info. If it's easier we can do a manual order, just send over your full name, address, and email address here and I'll get your order placed. LMK if you have any questions!"
+
+## 10. ORDER CONFIRMED + BRIEF
+Email version (with subject: Your [BRAND] [PRODUCT] Is On Its Way) + shorter DM version.
+Products are on their way. Reference brand deck link: [INSERT BRAND DECK LINK]. Email signature for email version.
+
+## 11. FOLLOW-UP TO POST
+Casual check-in after delivery. Ask how they're liking the product. Ask to tag the brand if they share.
+
+EMAIL SIGNATURE FORMAT:
+[Manager Name]
+[Manager Title]
+Agency Eight
+[Location]
+
+Use [PLACEHOLDER] format for any values not found in the provided materials.`;
+
+let copyFiles = [];
+
+function defaultNotes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("a8i_match_result") || "null");
+    const c = saved?.criteria;
+    if (!c) return "";
+    return [c.product && `Gifting: ${c.product}`, c.description].filter(Boolean).join(". ");
+  } catch { return ""; }
+}
+
+function renderCopyTab() {
+  content.innerHTML = `
+    <div class="src-label">Outreach Copy</div>
+    <p class="review-summary">Generates the same 11-message outreach sequence as the standalone Outreach Brief Creator, right from a8i.</p>
+    <div class="product-shell" style="max-width:none">
+      <div class="form-block" style="padding-top:0">
+        <div class="field">
+          <label>Brand materials <span style="font-weight:400;color:var(--dim)">(optional — decks, guidelines, briefs)</span></label>
+          <label class="upload-zone" for="copy-upload">
+            <div class="icon">&#8679;</div>
+            <div><strong>Click to upload</strong> or drag files here</div>
+          </label>
+          <input type="file" id="copy-upload" accept="application/pdf" multiple style="display:none">
+          <div id="copy-file-list" class="brief-list"></div>
+        </div>
+        <div class="field-row field-row-3">
+          <div class="field"><label>Brand name</label><input type="text" id="cp-brand" placeholder="e.g. ILIA Beauty"></div>
+          <div class="field"><label>Brand Instagram</label><input type="text" id="cp-ig" placeholder="e.g. @iliabeauty"></div>
+          <div class="field"><label>Brand website</label><input type="text" id="cp-site" placeholder="https://..."></div>
+        </div>
+        <div class="field-row field-row-3">
+          <div class="field"><label>Form link</label><input type="text" id="cp-form" placeholder="https://form.fillout.com/t/..."></div>
+          <div class="field"><label>Team email</label><input type="text" id="cp-team-email" placeholder="partnerships@agency-eight.com"></div>
+          <div class="field"><label>Location</label><input type="text" id="cp-location" placeholder="e.g. New York, NY"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Your name</label><input type="text" id="cp-name" placeholder="e.g. Loulou"></div>
+          <div class="field"><label>Your title</label><input type="text" id="cp-title" placeholder="e.g. ILIA Account Manager"></div>
+        </div>
+        <div class="field">
+          <label>Additional notes</label>
+          <textarea id="cp-notes" placeholder="Anything not covered above…">${escHtml(defaultNotes())}</textarea>
+        </div>
+      </div>
+      <div class="form-cta" style="justify-content:flex-start">
+        <button class="btn btn-solid" type="button" id="cp-generate">Generate Outreach Copy</button>
+      </div>
+      <p class="dim" id="cp-status" style="margin-top:14px"></p>
+      <div id="cp-output" style="margin-top:30px"></div>
+    </div>
+  `;
+
+  copyFiles = [];
+  const upload = document.getElementById("copy-upload");
+  const fileList = document.getElementById("copy-file-list");
+  upload.addEventListener("change", () => {
+    [...upload.files].forEach(f => {
+      const entry = { name: f.name, file: f, uploading: true };
+      copyFiles.push(entry);
+      renderFileList();
+      window.extractPdfText(f).then(text => { entry.text = text; entry.uploading = false; renderFileList(); })
+        .catch(() => { entry.text = ""; entry.uploading = false; entry.error = true; renderFileList(); });
+    });
+  });
+  function renderFileList() {
+    fileList.innerHTML = copyFiles.map((e, i) => `
+      <div class="brief-item ${e.uploading ? "uploading" : ""}">
+        <span class="name">${escHtml(e.name)}${e.uploading ? " — reading…" : e.error ? " — couldn't read" : ""}</span>
+        <button class="remove" type="button" data-i="${i}">&times;</button>
+      </div>
+    `).join("");
+    fileList.querySelectorAll(".remove").forEach(btn => btn.addEventListener("click", () => {
+      copyFiles.splice(+btn.dataset.i, 1);
+      renderFileList();
+    }));
+  }
+
+  document.getElementById("cp-generate").addEventListener("click", generateOutreachCopy);
+}
+
+async function generateOutreachCopy() {
+  let apiKey = getAnthropicKey();
+  if (!apiKey) {
+    apiKey = await promptForAnthropicKey();
+    if (!apiKey) return;
+  }
+
+  const fields = {
+    brand: document.getElementById("cp-brand").value.trim(),
+    ig: document.getElementById("cp-ig").value.trim(),
+    site: document.getElementById("cp-site").value.trim(),
+    form: document.getElementById("cp-form").value.trim(),
+    teamEmail: document.getElementById("cp-team-email").value.trim(),
+    managerName: document.getElementById("cp-name").value.trim(),
+    managerTitle: document.getElementById("cp-title").value.trim(),
+    location: document.getElementById("cp-location").value.trim(),
+    notes: document.getElementById("cp-notes").value.trim(),
+  };
+
+  const lines = [];
+  if (fields.brand) lines.push(`Brand name: ${fields.brand}`);
+  if (fields.ig) lines.push(`Brand Instagram: ${fields.ig}`);
+  if (fields.site) lines.push(`Brand website: ${fields.site}`);
+  if (fields.form) lines.push(`Form link: ${fields.form}`);
+  if (fields.teamEmail) lines.push(`Team email for paid inquiries: ${fields.teamEmail}`);
+  if (fields.managerName) lines.push(`Manager name: ${fields.managerName}`);
+  if (fields.managerTitle) lines.push(`Manager title: ${fields.managerTitle}`);
+  if (fields.location) lines.push(`Location: ${fields.location}`);
+  if (fields.notes) lines.push(`Additional notes: ${fields.notes}`);
+
+  const fileTexts = copyFiles.filter(f => f.text).map(f => `--- ${f.name} ---\n${f.text}`);
+  let userMessage = "CAMPAIGN DETAILS:\n" + (lines.length ? lines.join("\n") : "(none provided)");
+  if (fileTexts.length) userMessage += "\n\nBRAND MATERIALS:\n" + fileTexts.join("\n\n");
+
+  if (!lines.length && !fileTexts.length) {
+    document.getElementById("cp-status").textContent = "Add at least a brand name or upload a brand material first.";
+    return;
+  }
+
+  const status = document.getElementById("cp-status");
+  const output = document.getElementById("cp-output");
+  const btn = document.getElementById("cp-generate");
+  btn.disabled = true;
+  status.textContent = "Generating outreach copy… this takes about 30 seconds.";
+  output.innerHTML = "";
+
+  try {
+    const text = await callAnthropic(OUTREACH_PROMPT, userMessage, apiKey);
+    status.textContent = `Generated for ${fields.brand || "this campaign"}.`;
+    output.innerHTML = text.split(/\n---\n/).map(block => {
+      const m = block.trim().match(/^##\s*(.+)\n([\s\S]*)$/);
+      if (!m) return "";
+      return `
+        <div class="form-block">
+          <div class="form-block-label">${escHtml(m[1])}</div>
+          <p style="white-space:pre-wrap;font-size:14px;line-height:1.6">${escHtml(m[2].trim())}</p>
+        </div>
+      `;
+    }).join("");
+  } catch (e) {
+    status.textContent = `Error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+renderActiveTab();
 </script>
 </body>
 </html>

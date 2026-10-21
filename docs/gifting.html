@@ -73,12 +73,19 @@ const content = document.getElementById("content");
 // since a8i doesn't have one of its own yet. Each gets seeded with an empty
 // editable application the first time it's seen here, backdated a few mock
 // days so the list doesn't look like everything "applied" in the same instant.
+// Product defaults to whatever was entered on Onboarding, if anything was.
+let defaultProduct = "";
+try {
+  const saved = JSON.parse(localStorage.getItem("a8i_match_result") || "null");
+  defaultProduct = saved?.criteria?.product || "";
+} catch {}
+
 const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
 let seeded = false;
 approvedCreators.forEach((c, i) => {
   if (!giftData[c.id]) {
     giftData[c.id] = {
-      email: "", phone: "", shipping: "", product: "", notes: "",
+      email: "", phone: "", shipping: "", product: defaultProduct, notes: "",
       status: "Not placed",
       submittedAt: Date.now() - ((i % 6) + 1) * 86400000,
     };
