@@ -21,6 +21,8 @@
   --white: #FFFFFF;
   --dim: rgba(0,0,0,.52);
   --line: rgba(0,0,0,.12);
+  --green: #1A7A1A;
+  --amber: #B8690A;
   --display: 'Mona Sans Variable', -apple-system, sans-serif;
   --accent-serif: 'Newsreader', Georgia, serif;
 }
@@ -392,16 +394,26 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
 .src-table.track-table th:nth-child(8), .src-table.track-table td:nth-child(8) { width: 12%; }
 
 .src-table.gift-table th:nth-child(1), .src-table.gift-table td:nth-child(1) { width: 4%; }
-.src-table.gift-table th:nth-child(2), .src-table.gift-table td:nth-child(2) { width: 7%; }
+.src-table.gift-table th:nth-child(2), .src-table.gift-table td:nth-child(2) { width: 6%; }
 .src-table.gift-table th:nth-child(3), .src-table.gift-table td:nth-child(3) { width: 10%; }
 .src-table.gift-table th:nth-child(4), .src-table.gift-table td:nth-child(4) { width: 9%; }
 .src-table.gift-table th:nth-child(5), .src-table.gift-table td:nth-child(5) { width: 9%; }
 .src-table.gift-table th:nth-child(6), .src-table.gift-table td:nth-child(6) { width: 9%; }
-.src-table.gift-table th:nth-child(7), .src-table.gift-table td:nth-child(7) { width: 11%; }
+.src-table.gift-table th:nth-child(7), .src-table.gift-table td:nth-child(7) { width: 9%; }
 .src-table.gift-table th:nth-child(8), .src-table.gift-table td:nth-child(8) { width: 8%; }
-.src-table.gift-table th:nth-child(9), .src-table.gift-table td:nth-child(9) { width: 13%; }
+.src-table.gift-table th:nth-child(9), .src-table.gift-table td:nth-child(9) { width: 10%; }
 .src-table.gift-table th:nth-child(10), .src-table.gift-table td:nth-child(10) { width: 9%; }
-.src-table.gift-table th:nth-child(11), .src-table.gift-table td:nth-child(11) { width: 11%; }
+.src-table.gift-table th:nth-child(11), .src-table.gift-table td:nth-child(11) { width: 9%; }
+.src-table.gift-table th:nth-child(12), .src-table.gift-table td:nth-child(12) { width: 8%; }
+
+.src-table.order-table th:nth-child(1), .src-table.order-table td:nth-child(1) { width: 7%; }
+.src-table.order-table th:nth-child(2), .src-table.order-table td:nth-child(2) { width: 10%; }
+.src-table.order-table th:nth-child(3), .src-table.order-table td:nth-child(3) { width: 10%; }
+.src-table.order-table th:nth-child(4), .src-table.order-table td:nth-child(4) { width: 10%; }
+.src-table.order-table th:nth-child(5), .src-table.order-table td:nth-child(5) { width: 20%; }
+.src-table.order-table th:nth-child(6), .src-table.order-table td:nth-child(6) { width: 13%; }
+.src-table.order-table th:nth-child(7), .src-table.order-table td:nth-child(7) { width: 15%; }
+.src-table.order-table th:nth-child(8), .src-table.order-table td:nth-child(8) { width: 15%; }
 
 .btn-icon {
   width: 26px; height: 26px; border: 1.5px solid var(--line); border-radius: 0; background: var(--white);
@@ -419,6 +431,18 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
   background-repeat: no-repeat; background-position: right 10px center;
 }
 .status-select:focus { border-color: var(--red); }
+/* Progression color coding — first stage red, last stage green, everything
+   between amber; a stage flagged as a negative/closed outcome (e.g.
+   "Declined") is muted gray instead, since it's an off-ramp, not progress. */
+.status-select.stage-red { background-color: rgba(202,1,0,.08); color: var(--red); border-color: rgba(202,1,0,.3); }
+.status-select.stage-amber { background-color: rgba(184,105,10,.1); color: var(--amber); border-color: rgba(184,105,10,.3); }
+.status-select.stage-green { background-color: rgba(26,122,26,.1); color: var(--green); border-color: rgba(26,122,26,.3); }
+.status-select.stage-muted { background-color: rgba(0,0,0,.04); color: var(--dim); border-color: var(--line); }
+.outreach-step-cell { display: flex; align-items: center; gap: 5px; }
+.outreach-step-cell .status-select { flex: 1 1 auto; min-width: 0; }
+.outreach-step-cell .btn-icon { flex-shrink: 0; }
+.outreach-step-cell .btn-icon:disabled { opacity: .3; cursor: not-allowed; }
+.outreach-step-cell .btn-icon:disabled:hover { background: var(--white); color: var(--red); border-color: var(--line); }
 .updated-cell { font-size: 12px; color: var(--dim); }
 
 .empty-state { text-align: center; padding: 60px 20px; color: var(--dim); }

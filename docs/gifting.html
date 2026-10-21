@@ -54,6 +54,19 @@ function loadGiftData() { try { return JSON.parse(localStorage.getItem(GIFT_KEY)
 function saveGiftData(d) { localStorage.setItem(GIFT_KEY, JSON.stringify(d)); }
 
 const STATUS_OPTIONS = ["Not placed", "Order placed", "Delivered"];
+const ORDER_KEY = "a8i_order_placements";
+function loadOrders() { try { return JSON.parse(localStorage.getItem(ORDER_KEY) || "{}"); } catch { return {}; } }
+function saveOrders(o) { localStorage.setItem(ORDER_KEY, JSON.stringify(o)); }
+
+// First stage red, last stage green, everything between amber; a stage
+// flagged as a negative/closed outcome is muted gray instead.
+function stageColorClass(stages, value, negatives = []) {
+  if (negatives.includes(value)) return "stage-muted";
+  const idx = stages.indexOf(value);
+  if (idx <= 0) return "stage-red";
+  if (idx === stages.length - 1) return "stage-green";
+  return "stage-amber";
+}
 
 function platLink(url, label) {
   return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
@@ -131,6 +144,7 @@ if (!approvedCreators.length) {
             <th class="no-sort">Shipping Address</th>
             <th class="no-sort">Product</th>
             <th class="no-sort">Status</th>
+            <th class="no-sort"></th>
           </tr>
         </thead>
         <tbody id="ga-tbody"></tbody>
@@ -171,8 +185,11 @@ if (!approvedCreators.length) {
 
     document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${approvedCreators.length.toLocaleString()} applications`;
 
+    const orders = loadOrders();
+
     document.getElementById("ga-tbody").innerHTML = rows.length ? rows.map(c => {
       const g = giftData[c.id] || {};
+      const alreadySent = !!orders[c.id];
       return `
         <tr data-id="${escHtml(c.id)}">
           <td><button class="btn-icon ga-edit-btn" type="button" title="Edit email, shipping, product, notes">&#9998;</button></td>
@@ -185,10 +202,11 @@ if (!approvedCreators.length) {
           <td>${cellOr(g.phone)}</td>
           <td>${cellOr(g.shipping)}</td>
           <td>${cellOr(g.product)}</td>
-          <td><select class="status-select ga-status-sel" data-id="${escHtml(c.id)}">${STATUS_OPTIONS.map(s => `<option value="${escHtml(s)}"${s === g.status ? " selected" : ""}>${escHtml(s)}</option>`).join("")}</select></td>
+          <td><select class="status-select ga-status-sel ${stageColorClass(STATUS_OPTIONS, g.status)}" data-id="${escHtml(c.id)}">${STATUS_OPTIONS.map(s => `<option value="${escHtml(s)}"${s === g.status ? " selected" : ""}>${escHtml(s)}</option>`).join("")}</select></td>
+          <td><button class="btn-icon ga-send-order-btn" type="button" data-id="${escHtml(c.id)}" title="${alreadySent ? "Already sent — click to resend the latest details" : "Send to Order Placement"}">${alreadySent ? "&#10003;" : "&rarr;"}</button></td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No applications match these filters.</td></tr>`;
+    }).join("") : `<tr><td colspan="12" class="dim" style="text-align:center;padding:30px">No applications match these filters.</td></tr>`;
 
     document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
     const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
@@ -201,6 +219,23 @@ if (!approvedCreators.length) {
       sel.addEventListener("change", () => {
         giftData[sel.dataset.id] = { ...(giftData[sel.dataset.id] || {}), status: sel.value };
         saveGiftData(giftData);
+        sel.className = `status-select ga-status-sel ${stageColorClass(STATUS_OPTIONS, sel.value)}`;
+      });
+    });
+    document.querySelectorAll(".ga-send-order-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.id;
+        const c = known[id];
+        const g = giftData[id] || {};
+        const ord = loadOrders();
+        ord[id] = {
+          ...(ord[id] || {}),
+          email: g.email, phone: g.phone, shipping: g.shipping, product: g.product, notes: g.notes,
+          orderStatus: ord[id]?.orderStatus || "Pending",
+          sentAt: Date.now(),
+        };
+        saveOrders(ord);
+        render();
       });
     });
   }

@@ -71,10 +71,33 @@ function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISION
 function loadTracking() { try { return JSON.parse(localStorage.getItem(TRACKING_KEY) || "{}"); } catch { return {}; } }
 function saveTracking(t) { localStorage.setItem(TRACKING_KEY, JSON.stringify(t)); }
 
-const OUTREACH_STAGES = ["Not started", "Sent", "Responded", "Confirmed", "Declined"];
+// Outreach steps map directly onto the 11 generated messages (msg: the
+// number Outreach Copy tags each message with) rather than generic stages,
+// so "Email Follow-up #1" here is literally the same message you'd copy.
+// Declined sits mid-array on purpose — stageColorClass treats it as a
+// negative/closed outcome regardless of position, and Confirmed stays last
+// so it reads as the "done" green stage.
+const OUTREACH_STEPS = [
+  { label: "Not started", msg: null },
+  { label: "Initial Email Sent", msg: 1 },
+  { label: "Email Follow-up #1", msg: 2 },
+  { label: "Initial DM Sent", msg: 3 },
+  { label: "DM Follow-up #1", msg: 4 },
+  { label: "Follow-up — Form Not Filled", msg: 9 },
+  { label: "Declined", msg: 6 },
+  { label: "Confirmed", msg: 10 },
+];
+const OUTREACH_STEP_LABELS = OUTREACH_STEPS.map(s => s.label);
 const GIFTING_STAGES = ["Not started", "Order placed", "Shipped", "Delivered"];
 const POSTING_STAGES = ["Not started", "Content due", "Posted", "Live"];
 
+function stageColorClass(stages, value, negatives = []) {
+  if (negatives.includes(value)) return "stage-muted";
+  const idx = stages.indexOf(value);
+  if (idx <= 0) return "stage-red";
+  if (idx === stages.length - 1) return "stage-green";
+  return "stage-amber";
+}
 function platLink(url, label) {
   return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
 }
@@ -87,6 +110,7 @@ function fmtUpdated(ts) {
   if (!ts) return `<span class="dim">—</span>`;
   return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+function loadOutreachMessages() { try { return JSON.parse(localStorage.getItem("a8i_outreach_messages") || "{}"); } catch { return {}; } }
 
 const known = loadKnown();
 const decisions = loadDecisions();
@@ -176,21 +200,45 @@ function renderTrackingTab() {
 
     document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${approvedCreators.length.toLocaleString()} approved`;
 
+    const outreachMessages = loadOutreachMessages();
+
     document.getElementById("track-tbody").innerHTML = rows.length ? rows.map(c => {
       const t = tracking[c.id] || {};
+      const step = OUTREACH_STEPS.find(s => s.label === t.outreach) || OUTREACH_STEPS[0];
+      const hasCopy = step.msg && outreachMessages[step.msg];
       return `
         <tr data-id="${escHtml(c.id)}">
           <td class="name-cell">${escHtml(c.name)}</td>
           <td>${igCell(c)}</td>
           <td>${ttCell(c)}</td>
           <td>${escHtml(c.client)}</td>
-          <td><select class="status-select" data-field="outreach">${statusOptions(OUTREACH_STAGES, t.outreach)}</select></td>
-          <td><select class="status-select" data-field="gifting">${statusOptions(GIFTING_STAGES, t.gifting)}</select></td>
-          <td><select class="status-select" data-field="posting">${statusOptions(POSTING_STAGES, t.posting)}</select></td>
+          <td>
+            <div class="outreach-step-cell">
+              <select class="status-select ${stageColorClass(OUTREACH_STEP_LABELS, t.outreach, ["Declined"])}" data-field="outreach">${statusOptions(OUTREACH_STEP_LABELS, t.outreach)}</select>
+              <button class="btn-icon track-copy-btn" type="button" data-msg="${step.msg || ""}" ${hasCopy ? "" : "disabled"} title="${hasCopy ? "Copy this message, with the creator's name filled in" : "Generate Outreach Copy first, or this step has no message"}">&#128203;</button>
+            </div>
+          </td>
+          <td><select class="status-select ${stageColorClass(GIFTING_STAGES, t.gifting)}" data-field="gifting">${statusOptions(GIFTING_STAGES, t.gifting)}</select></td>
+          <td><select class="status-select ${stageColorClass(POSTING_STAGES, t.posting)}" data-field="posting">${statusOptions(POSTING_STAGES, t.posting)}</select></td>
           <td class="updated-cell">${fmtUpdated(t.updatedAt)}</td>
         </tr>
       `;
     }).join("") : `<tr><td colspan="8" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+
+    document.querySelectorAll(".track-copy-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest("tr");
+        const id = row.dataset.id;
+        const c = known[id];
+        const msg = outreachMessages[btn.dataset.msg] || "";
+        const personalized = msg.replace(/\[NAME\]/g, c.name);
+        navigator.clipboard.writeText(personalized).then(() => {
+          const original = btn.innerHTML;
+          btn.innerHTML = "&#10003;";
+          setTimeout(() => { btn.innerHTML = original; }, 1200);
+        });
+      });
+    });
 
     document.querySelectorAll(".status-select").forEach(sel => {
       sel.addEventListener("change", () => {
@@ -199,6 +247,10 @@ function renderTrackingTab() {
         const field = sel.dataset.field;
         tracking[id] = { ...(tracking[id] || {}), [field]: sel.value, updatedAt: Date.now() };
         saveTracking(tracking);
+        const stages = field === "outreach" ? OUTREACH_STEP_LABELS : field === "gifting" ? GIFTING_STAGES : POSTING_STAGES;
+        const negatives = field === "outreach" ? ["Declined"] : [];
+        sel.className = `status-select ${stageColorClass(stages, sel.value, negatives)}`;
+        if (field === "outreach") render();
         row.querySelector(".updated-cell").innerHTML = fmtUpdated(tracking[id].updatedAt);
       });
     });
@@ -450,6 +502,17 @@ async function generateOutreachCopy() {
   try {
     const text = await callAnthropic(OUTREACH_PROMPT, userMessage, apiKey);
     status.textContent = `Generated for ${fields.brand || "this campaign"}.`;
+
+    // Saved by message number (not just rendered) so the Tracking tab's
+    // per-creator Copy button can pull the exact text for whatever step
+    // a creator is on — [NAME] gets swapped for their real name there.
+    const messages = {};
+    text.split(/\n---\n/).forEach(block => {
+      const m = block.trim().match(/^##\s*(\d+)\.\s*(.+)\n([\s\S]*)$/);
+      if (m) messages[m[1]] = m[3].trim();
+    });
+    localStorage.setItem("a8i_outreach_messages", JSON.stringify(messages));
+
     output.innerHTML = text.split(/\n---\n/).map(block => {
       const m = block.trim().match(/^##\s*(.+)\n([\s\S]*)$/);
       if (!m) return "";

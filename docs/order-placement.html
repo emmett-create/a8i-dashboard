@@ -11,30 +11,176 @@
 <section class="hero" style="padding-bottom:40px">
 <div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
-    <div class="eyebrow">A8I Process &middot; 05</div>
+    <div class="eyebrow">A8I &middot; 05</div>
     <h1>Order Placement</h1>
   </div>
 </section>
-<section class="section" style="padding-top:60px">
-  <div id="rows"></div>
-</section>
-<div id="footer"></div>
 
+<section class="section src-section" style="padding-top:60px">
+  <div class="src-label">Orders Queue</div>
+  <p class="review-summary" id="op-summary"></p>
+  <div id="content"></div>
+</section>
+
+<div id="footer"></div>
 <script src="common.js"></script>
 <script>
-const ROWS = [
-  { num: 1, title: "Placing Orders", items: [
-    { text: "Shopify connection" },
-    { text: "What if you don't use Shopify?", children: [{ text: "Generate CSV" }] },
-    { text: "What about the complex Shopifys?", question: true },
-  ]},
-  { num: 2, title: "Sending Brief", items: [
-    { text: "Auto with dates" },
-  ]},
-];
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
-document.getElementById("rows").innerHTML = renderRowList(ROWS);
+
+const KNOWN_KEY = "a8i_known_creators";
+const ORDER_KEY = "a8i_order_placements";
+const GIFT_KEY = "a8i_gift_applications";
+
+function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
+function loadOrders() { try { return JSON.parse(localStorage.getItem(ORDER_KEY) || "{}"); } catch { return {}; } }
+function saveOrders(o) { localStorage.setItem(ORDER_KEY, JSON.stringify(o)); }
+function loadGiftData() { try { return JSON.parse(localStorage.getItem(GIFT_KEY) || "{}"); } catch { return {}; } }
+function saveGiftData(d) { localStorage.setItem(GIFT_KEY, JSON.stringify(d)); }
+
+const ORDER_STAGES = ["Pending", "Ordered"];
+
+function stageColorClass(stages, value, negatives = []) {
+  if (negatives.includes(value)) return "stage-muted";
+  const idx = stages.indexOf(value);
+  if (idx <= 0) return "stage-red";
+  if (idx === stages.length - 1) return "stage-green";
+  return "stage-amber";
+}
+function platLink(url, label) {
+  return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
+}
+function igCell(c) { return c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle) : `<span class="dim">—</span>`; }
+function ttCell(c) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle) : `<span class="dim">—</span>`; }
+function cellOr(v) { return v ? escHtml(v) : `<span class="dim">—</span>`; }
+function fmtDate(ts) { return ts ? new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"; }
+
+const known = loadKnown();
+const content = document.getElementById("content");
+
+// Rows here come from the "Send to Order Placement" button on each Gifting
+// row — this page doesn't source its own creators, it's purely what's been
+// pushed over from Gifting once their info (shipping, product) is ready.
+let orders = loadOrders();
+const orderRows = Object.entries(orders)
+  .map(([id, o]) => ({ id, creator: known[id], ...o }))
+  .filter(r => r.creator);
+
+if (!orderRows.length) {
+  document.getElementById("op-summary").textContent = "";
+  content.innerHTML = `
+    <div class="empty-state">
+      No orders queued yet.<br>
+      <a href="gifting.html">Send a gift application over from Gifting first &rarr;</a>
+    </div>
+  `;
+} else {
+  document.getElementById("op-summary").textContent =
+    `${orderRows.length.toLocaleString()} creator${orderRows.length === 1 ? "" : "s"} sent over from Gifting, ready to place.`;
+
+  content.innerHTML = `
+    <div class="src-toolbar">
+      <input type="search" id="op-search" placeholder="Search name or handle…">
+      <select id="op-filter-status">
+        <option value="">All statuses</option>
+        ${ORDER_STAGES.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join("")}
+      </select>
+    </div>
+    <p class="src-shown-count" id="shown-count"></p>
+    <div class="src-table-wrap">
+      <table class="src-table order-table">
+        <thead>
+          <tr>
+            <th class="sort" data-col="sentAt">Sent <span class="sort-icon"></span></th>
+            <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+            <th class="no-sort">Instagram</th>
+            <th class="no-sort">TikTok</th>
+            <th class="no-sort">Shipping Address</th>
+            <th class="no-sort">Product</th>
+            <th class="no-sort">Notes</th>
+            <th class="no-sort">Status</th>
+          </tr>
+        </thead>
+        <tbody id="op-tbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  let sortCol = "sentAt", sortDir = "desc";
+
+  function render() {
+    orders = loadOrders();
+    const q = document.getElementById("op-search").value.trim().toLowerCase();
+    const statusFilter = document.getElementById("op-filter-status").value;
+
+    let rows = orderRows.map(r => ({ ...r, ...orders[r.id] })).filter(r => {
+      if (statusFilter && r.orderStatus !== statusFilter) return false;
+      if (q && !`${r.creator.name} ${r.creator.ig_handle || ""} ${r.creator.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      let av = sortCol === "name" ? a.creator.name : a[sortCol];
+      let bv = sortCol === "name" ? b.creator.name : b[sortCol];
+      if (sortCol === "sentAt") { av = av || 0; bv = bv || 0; }
+      else { av = (av || "").toString().toLowerCase(); bv = (bv || "").toString().toLowerCase(); }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${orderRows.length.toLocaleString()} queued`;
+
+    document.getElementById("op-tbody").innerHTML = rows.length ? rows.map(r => `
+      <tr data-id="${escHtml(r.id)}">
+        <td class="dim">${fmtDate(r.sentAt)}</td>
+        <td class="name-cell">${escHtml(r.creator.name)}</td>
+        <td>${igCell(r.creator)}</td>
+        <td>${ttCell(r.creator)}</td>
+        <td>${cellOr(r.shipping)}</td>
+        <td>${cellOr(r.product)}</td>
+        <td>${cellOr(r.notes)}</td>
+        <td><select class="status-select op-status-sel ${stageColorClass(ORDER_STAGES, r.orderStatus)}" data-id="${escHtml(r.id)}">${ORDER_STAGES.map(s => `<option value="${escHtml(s)}"${s === r.orderStatus ? " selected" : ""}>${escHtml(s)}</option>`).join("")}</select></td>
+      </tr>
+    `).join("") : `<tr><td colspan="8" class="dim" style="text-align:center;padding:30px">No orders match these filters.</td></tr>`;
+
+    document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
+    const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
+    if (activeTh) activeTh.textContent = sortDir === "asc" ? " ↑" : " ↓";
+
+    // Placing an order here is the trigger — flips this row's own status AND
+    // writes "Order placed" straight back into the Gifting record so the two
+    // pages never have to be reconciled by hand.
+    document.querySelectorAll(".op-status-sel").forEach(sel => {
+      sel.addEventListener("change", () => {
+        const id = sel.dataset.id;
+        orders[id] = { ...(orders[id] || {}), orderStatus: sel.value, placedAt: sel.value === "Ordered" ? Date.now() : orders[id]?.placedAt };
+        saveOrders(orders);
+        sel.className = `status-select op-status-sel ${stageColorClass(ORDER_STAGES, sel.value)}`;
+
+        if (sel.value === "Ordered") {
+          const giftData = loadGiftData();
+          giftData[id] = { ...(giftData[id] || {}), status: "Order placed" };
+          saveGiftData(giftData);
+        }
+      });
+    });
+  }
+
+  document.querySelectorAll(".src-table th.sort").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = col === "sentAt" ? "desc" : "asc"; }
+      render();
+    });
+  });
+  ["op-search", "op-filter-status"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  render();
+}
 </script>
 </body>
 </html>
