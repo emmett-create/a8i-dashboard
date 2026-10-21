@@ -32,11 +32,6 @@ body {
   font-family: var(--display);
   background: var(--ivory);
   color: var(--black);
-  /* A real custom cursor (not a JS-driven follower div) — the OS positions
-     it with zero lag, same as the system arrow, just swapped for our mark.
-     32x32 hotspot centered; kept well under the ~128px cap browsers
-     silently ignore oversized cursor images past. */
-  cursor: url('assets/cursor-a8.png') 16 16, auto;
 }
 
 a { color: inherit; text-decoration: none; }
