@@ -60,6 +60,93 @@ function igCell(c) { return c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle) 
 function ttCell(c) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle) : `<span class="dim">—</span>`; }
 function cellOr(v) { return v ? escHtml(v) : `<span class="dim">—</span>`; }
 
+// ── Follower range slider (same tiered scale as Onboarding's, duplicated
+// here since this page has its own script scope) ─────────────────────────
+const FOLLOWER_SCALE = [0, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000, 25000000];
+function followerIdxLabel(idx, isMax) {
+  const v = FOLLOWER_SCALE[idx];
+  if (v === 0) return "0";
+  const label = v >= 1000000 ? (v / 1000000) + "M" : (v / 1000) + "K";
+  return (isMax && idx === FOLLOWER_SCALE.length - 1) ? label + "+" : label;
+}
+function followerValueAtPct(pct) {
+  return FOLLOWER_SCALE[Math.round((pct / 100) * (FOLLOWER_SCALE.length - 1))];
+}
+function rangeSliderHTML(prefix) {
+  return `
+    <div class="src-range-filter">
+      <div class="src-range-label">Followers</div>
+      <div class="range-slider" id="${prefix}-slider">
+        <div class="range-track"></div>
+        <div class="range-fill" id="${prefix}-fill"></div>
+        <input type="range" min="0" max="100" value="0" id="${prefix}-min">
+        <input type="range" min="0" max="100" value="100" id="${prefix}-max">
+      </div>
+      <div class="range-labels"><span id="${prefix}-min-label"></span><span>&ndash;</span><span id="${prefix}-max-label"></span></div>
+    </div>
+  `;
+}
+function initRangeSlider(prefix, onChange) {
+  const fMin = document.getElementById(`${prefix}-min`);
+  const fMax = document.getElementById(`${prefix}-max`);
+  // Separated from the input handlers below: this only syncs the fill/label
+  // UI and runs once at setup time, before `onChange` (which calls back into
+  // this very function's return value) has actually been assigned yet.
+  function syncUI() {
+    document.getElementById(`${prefix}-fill`).style.left = fMin.value + "%";
+    document.getElementById(`${prefix}-fill`).style.width = (fMax.value - fMin.value) + "%";
+    document.getElementById(`${prefix}-min-label`).textContent = followerIdxLabel(Math.round((+fMin.value / 100) * (FOLLOWER_SCALE.length - 1)), false);
+    document.getElementById(`${prefix}-max-label`).textContent = followerIdxLabel(Math.round((+fMax.value / 100) * (FOLLOWER_SCALE.length - 1)), true);
+  }
+  fMin.addEventListener("input", () => { if (+fMin.value > +fMax.value) fMin.value = fMax.value; syncUI(); onChange(); });
+  fMax.addEventListener("input", () => { if (+fMax.value < +fMin.value) fMax.value = fMin.value; syncUI(); onChange(); });
+  syncUI();
+  return {
+    getMin: () => followerValueAtPct(+fMin.value),
+    getMax: () => (+fMax.value === 100 ? Infinity : followerValueAtPct(+fMax.value)),
+  };
+}
+
+// ── Vertical multi-select (checkbox dropdown) ─────────────────────────────
+function multiselectHTML(prefix, label) {
+  return `
+    <div class="multiselect" id="${prefix}">
+      <button type="button" class="multiselect-btn" id="${prefix}-btn">All ${escHtml(label)}</button>
+      <div class="multiselect-panel hidden" id="${prefix}-panel"></div>
+    </div>
+  `;
+}
+function initMultiselect(prefix, options, label, onChange) {
+  const root = document.getElementById(prefix);
+  const btn = document.getElementById(`${prefix}-btn`);
+  const panel = document.getElementById(`${prefix}-panel`);
+  const selected = new Set();
+
+  panel.innerHTML = options.map(v => `
+    <label><input type="checkbox" value="${escHtml(v)}"> ${escHtml(v)}</label>
+  `).join("");
+
+  function updateBtnLabel() {
+    btn.textContent = selected.size === 0 ? `All ${label}` : `${selected.size} ${label} selected`;
+  }
+  panel.querySelectorAll("input[type=checkbox]").forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) selected.add(cb.value); else selected.delete(cb.value);
+      updateBtnLabel();
+      onChange();
+    });
+  });
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.querySelectorAll(".multiselect-panel").forEach(p => { if (p !== panel) p.classList.add("hidden"); });
+    panel.classList.toggle("hidden");
+  });
+  document.addEventListener("click", (e) => {
+    if (!root.contains(e.target)) panel.classList.add("hidden");
+  });
+  return { getSelected: () => selected };
+}
+
 // ── Merge whatever matched this session into a durable "ever seen" cache,
 // so approvals survive the next onboarding run overwriting the match result.
 const saved = localStorage.getItem("a8i_match_result");
@@ -145,7 +232,9 @@ function renderReviewTab() {
             <option value="yes">Approved only</option>
             <option value="no">Disapproved only</option>
           </select>
+          ${multiselectHTML("src-filter-vertical", "verticals")}
         </div>
+        ${rangeSliderHTML("src-follower")}
       `,
       columns: `
         <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
@@ -173,6 +262,9 @@ function renderReviewTab() {
   [...new Set(allCreators.map(c => c.gender).filter(Boolean))].sort().forEach(v => {
     genderSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
   });
+  const verticalOptions = [...new Set(allCreators.map(c => c.vertical).filter(Boolean))].sort();
+  const verticalFilter = initMultiselect("src-filter-vertical", verticalOptions, "verticals", () => render());
+  const followerFilter = initRangeSlider("src-follower", () => render());
 
   let sortCol = "followers", sortDir = "desc";
 
@@ -194,10 +286,16 @@ function renderReviewTab() {
     const genderFilter = document.getElementById("src-filter-gender").value;
     const voteFilter = document.getElementById("src-filter-vote").value;
 
+    const verticalSelected = verticalFilter.getSelected();
+    const fMin = followerFilter.getMin(), fMax = followerFilter.getMax();
+
     let rows = allCreators.filter(c => {
       if (bucketFilter && c.bucket !== bucketFilter) return false;
       if (clientFilter && c.client !== clientFilter) return false;
       if (genderFilter && c.gender !== genderFilter) return false;
+      if (verticalSelected.size && !verticalSelected.has(c.vertical)) return false;
+      const followers = c.followers || 0;
+      if (followers < fMin || followers > fMax) return false;
       const vote = decisions[c.id] || "pending";
       if (voteFilter && vote !== voteFilter) return false;
       if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
@@ -295,7 +393,9 @@ function renderMasterTab() {
           <input type="search" id="master-search" placeholder="Search name or handle…">
           <select id="master-filter-client"><option value="">All clients</option></select>
           <select id="master-filter-gender"><option value="">All genders</option></select>
+          ${multiselectHTML("master-filter-vertical", "verticals")}
         </div>
+        ${rangeSliderHTML("master-follower")}
       `,
       columns: `
         <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
@@ -322,6 +422,9 @@ function renderMasterTab() {
   [...new Set(approvedCreators.map(c => c.gender).filter(Boolean))].sort().forEach(v => {
     genderSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
   });
+  const verticalOptions = [...new Set(approvedCreators.map(c => c.vertical).filter(Boolean))].sort();
+  const verticalFilter = initMultiselect("master-filter-vertical", verticalOptions, "verticals", () => render());
+  const followerFilter = initRangeSlider("master-follower", () => render());
 
   let sortCol = "followers", sortDir = "desc";
 
@@ -329,10 +432,15 @@ function renderMasterTab() {
     const q = document.getElementById("master-search").value.trim().toLowerCase();
     const clientFilter = document.getElementById("master-filter-client").value;
     const genderFilter = document.getElementById("master-filter-gender").value;
+    const verticalSelected = verticalFilter.getSelected();
+    const fMin = followerFilter.getMin(), fMax = followerFilter.getMax();
 
     let rows = approvedCreators.filter(c => {
       if (clientFilter && c.client !== clientFilter) return false;
       if (genderFilter && c.gender !== genderFilter) return false;
+      if (verticalSelected.size && !verticalSelected.has(c.vertical)) return false;
+      const followers = c.followers || 0;
+      if (followers < fMin || followers > fMax) return false;
       if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
