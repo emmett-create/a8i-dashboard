@@ -8,9 +8,8 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="header"></div>
-
 <section class="hero">
+<div id="header"></div>
   <div class="hero-inner">
     <div class="eyebrow">Agency Eight</div>
     <h1>A8I</h1>
@@ -47,7 +46,7 @@ const AREAS = [
   { id: "reporting",        num: 7, title: "Reporting" },
 ];
 
-document.getElementById("header").innerHTML = renderHeader({ onDark: false });
+document.getElementById("header").innerHTML = renderHeader({ onDark: true });
 document.getElementById("footer").innerHTML = renderFooter();
 const lastAlone = AREAS.length % 3 === 1;
 document.getElementById("card-grid").innerHTML = AREAS.map((a, i) => `

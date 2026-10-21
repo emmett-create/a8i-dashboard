@@ -8,8 +8,8 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="header"></div>
 <section class="hero" style="padding-bottom:40px">
+<div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
     <div class="eyebrow">A8I Process &middot; 04</div>
     <h1>Outreach</h1>
@@ -28,7 +28,7 @@ const ROWS = [
     { text: "Our own Mail Meteor", annotation: "MCT" },
   ]},
 ];
-document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "process.html" });
+document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
 document.getElementById("rows").innerHTML = renderRowList(ROWS);
 </script>

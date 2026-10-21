@@ -8,8 +8,8 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="header"></div>
 <section class="hero" style="padding-bottom:40px">
+<div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
     <div class="eyebrow">A8I &middot; 02</div>
     <h1>Sourcing</h1>
@@ -17,19 +17,28 @@
   </div>
 </section>
 
-<section class="section" style="padding-top:60px;max-width:1200px">
+<section class="section src-section" style="padding-top:60px">
+  <div class="src-tabs" id="src-tabs">
+    <button class="src-tab active" data-tab="review" type="button">Review</button>
+    <button class="src-tab" data-tab="master" type="button">Master List</button>
+  </div>
   <div id="content"></div>
 </section>
 
 <div id="footer"></div>
 <script src="common.js"></script>
 <script>
-document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "process.html" });
+document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
 
 const DECISIONS_KEY = "a8i_creator_decisions";
+const KNOWN_KEY = "a8i_known_creators";
+
 function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
 function saveDecisions(d) { localStorage.setItem(DECISIONS_KEY, JSON.stringify(d)); }
+function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
+function saveKnown(k) { localStorage.setItem(KNOWN_KEY, JSON.stringify(k)); }
+
 let decisions = loadDecisions();
 
 function fmtFollowers(n) {
@@ -41,69 +50,116 @@ function fmtFollowers(n) {
 function platLink(url, label) {
   return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
 }
+function demoLine(c) {
+  const parts = [c.location, c.age, c.gender].filter(Boolean);
+  return parts.length ? escHtml(parts.join(" · ")) : `<span class="dim">—</span>`;
+}
+function socialCell(c) {
+  const ig = c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle) : "";
+  const tt = c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle) : "";
+  if (!ig && !tt) return `<span class="dim">—</span>`;
+  return `${ig ? `<div class="social-line"><span class="social-tag">IG</span>${ig}</div>` : ""}${tt ? `<div class="social-line"><span class="social-tag">TT</span>${tt}</div>` : ""}`;
+}
 
+// ── Merge whatever matched this session into a durable "ever seen" cache,
+// so approvals survive the next onboarding run overwriting the match result.
 const saved = localStorage.getItem("a8i_match_result");
-const content = document.getElementById("content");
+let known = loadKnown();
+let criteria = null, matchSummary = null;
 
-if (!saved) {
-  content.innerHTML = `
-    <div class="empty-state">
-      No sourcing criteria yet.<br>
-      <a href="onboarding.html">Go describe who you're looking for in Onboarding &rarr;</a>
+if (saved) {
+  const parsed = JSON.parse(saved);
+  criteria = parsed.criteria;
+  matchSummary = parsed.data;
+  const matched = (parsed.data.matched_creators || []).map(c => ({ ...c, bucket: "matched" }));
+  const partial = (parsed.data.partial_creators || []).map(c => ({ ...c, bucket: "partial" }));
+  [...matched, ...partial].forEach(c => { known[c.id] = c; });
+  saveKnown(known);
+}
+
+const content = document.getElementById("content");
+const tabs = document.querySelectorAll(".src-tab");
+let activeTab = "review";
+
+tabs.forEach(btn => {
+  btn.addEventListener("click", () => {
+    activeTab = btn.dataset.tab;
+    tabs.forEach(b => b.classList.toggle("active", b === btn));
+    renderActiveTab();
+  });
+});
+
+function renderActiveTab() {
+  if (activeTab === "review") renderReviewTab();
+  else renderMasterTab();
+}
+
+function tableShell({ toolbar, columns, bodyId }) {
+  return `
+    ${toolbar}
+    <p class="src-shown-count" id="shown-count"></p>
+    <div class="src-table-wrap">
+      <table class="src-table">
+        <thead><tr>${columns}</tr></thead>
+        <tbody id="${bodyId}"></tbody>
+      </table>
     </div>
   `;
-} else {
-  const { criteria, data } = JSON.parse(saved);
-  const matched = (data.matched_creators || []).map(c => ({ ...c, bucket: "matched" }));
-  const partial = (data.partial_creators || []).map(c => ({ ...c, bucket: "partial" }));
+}
+
+// ── Tab 1: Review (approve / disapprove what this session matched) ───────
+function renderReviewTab() {
+  if (!saved) {
+    content.innerHTML = `
+      <div class="empty-state">
+        No sourcing criteria yet.<br>
+        <a href="onboarding.html">Go describe who you're looking for in Onboarding &rarr;</a>
+      </div>
+    `;
+    return;
+  }
+
+  const matched = (matchSummary.matched_creators || []).map(c => ({ ...c, bucket: "matched" }));
+  const partial = (matchSummary.partial_creators || []).map(c => ({ ...c, bucket: "partial" }));
   const allCreators = [...matched, ...partial];
 
   content.innerHTML = `
     <p class="review-summary">Based on: <em>"${escHtml(criteria.description || "(no description given)")}"</em> &middot;
-      ${data.matched.toLocaleString()} confident match${data.matched === 1 ? "" : "es"}, ${data.partial.toLocaleString()} partial, out of ${data.total.toLocaleString()} test creators.</p>
+      ${matchSummary.matched.toLocaleString()} confident match${matchSummary.matched === 1 ? "" : "es"}, ${matchSummary.partial.toLocaleString()} partial, out of ${matchSummary.total.toLocaleString()} test creators.</p>
     <div class="review-tally" id="tally"></div>
-
-    <div class="src-toolbar">
-      <input type="search" id="src-search" placeholder="Search name or handle…">
-      <select id="src-filter-bucket">
-        <option value="">All (matched + needs review)</option>
-        <option value="matched">Confident Matches</option>
-        <option value="partial">Needs Review</option>
-      </select>
-      <select id="src-filter-client"><option value="">All clients</option></select>
-      <select id="src-filter-gender"><option value="">All genders</option></select>
-      <select id="src-filter-vote">
-        <option value="">All (any vote status)</option>
-        <option value="pending">Pending only</option>
-        <option value="yes">Approved only</option>
-        <option value="no">Disapproved only</option>
-      </select>
-    </div>
-    <p class="src-shown-count" id="shown-count"></p>
-
-    <div class="src-table-wrap">
-      <table class="src-table">
-        <thead>
-          <tr>
-            <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
-            <th class="no-sort">Instagram</th>
-            <th class="no-sort">TikTok</th>
-            <th class="sort" data-col="followers">Followers <span class="sort-icon"></span></th>
-            <th class="sort" data-col="vertical">Vertical <span class="sort-icon"></span></th>
-            <th class="sort" data-col="location">Location <span class="sort-icon"></span></th>
-            <th class="sort" data-col="age">Age <span class="sort-icon"></span></th>
-            <th class="sort" data-col="gender">Gender <span class="sort-icon"></span></th>
-            <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
-            <th class="sort" data-col="bucket">Status <span class="sort-icon"></span></th>
-            <th class="no-sort">Approve</th>
-          </tr>
-        </thead>
-        <tbody id="src-tbody"></tbody>
-      </table>
-    </div>
+    ${tableShell({
+      toolbar: `
+        <div class="src-toolbar">
+          <input type="search" id="src-search" placeholder="Search name or handle…">
+          <select id="src-filter-bucket">
+            <option value="">All (matched + needs review)</option>
+            <option value="matched">Confident Matches</option>
+            <option value="partial">Needs Review</option>
+          </select>
+          <select id="src-filter-client"><option value="">All clients</option></select>
+          <select id="src-filter-gender"><option value="">All genders</option></select>
+          <select id="src-filter-vote">
+            <option value="">All (any vote status)</option>
+            <option value="pending">Pending only</option>
+            <option value="yes">Approved only</option>
+            <option value="no">Disapproved only</option>
+          </select>
+        </div>
+      `,
+      columns: `
+        <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+        <th class="no-sort">Social</th>
+        <th class="sort" data-col="followers">Followers <span class="sort-icon"></span></th>
+        <th class="sort" data-col="vertical">Vertical <span class="sort-icon"></span></th>
+        <th class="no-sort">Demo</th>
+        <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+        <th class="sort" data-col="bucket">Status <span class="sort-icon"></span></th>
+        <th class="no-sort">Approve</th>
+      `,
+      bodyId: "src-tbody",
+    })}
   `;
 
-  // ── Dynamically populate filters from the actual data ─────────────────────
   const clientSel = document.getElementById("src-filter-client");
   [...new Set(allCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
     clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
@@ -159,13 +215,10 @@ if (!saved) {
       return `
         <tr data-id="${escHtml(c.id)}" class="${vote === "no" ? "decided-no" : ""}">
           <td class="name-cell">${escHtml(c.name)}</td>
-          <td>${platLink(c.ig_url, c.ig_handle ? "@" + c.ig_handle : "")}</td>
-          <td>${platLink(c.tt_url, c.tt_handle ? "@" + c.tt_handle : "")}</td>
+          <td>${socialCell(c)}</td>
           <td>${fmtFollowers(c.followers)}</td>
           <td>${c.vertical ? escHtml(c.vertical) : `<span class="dim">—</span>`}</td>
-          <td>${c.location ? escHtml(c.location) : `<span class="dim">—</span>`}</td>
-          <td>${c.age ? escHtml(c.age) : `<span class="dim">—</span>`}</td>
-          <td>${c.gender ? escHtml(c.gender) : `<span class="dim">—</span>`}</td>
+          <td>${demoLine(c)}</td>
           <td>${escHtml(c.client)}</td>
           <td>${c.bucket === "matched" ? "Match" : "Needs review"}</td>
           <td>
@@ -176,7 +229,7 @@ if (!saved) {
           </td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+    }).join("") : `<tr><td colspan="8" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
 
     document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
     const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
@@ -210,6 +263,120 @@ if (!saved) {
   updateTally();
   render();
 }
+
+// ── Tab 2: Master List (every creator ever approved, across sessions) ────
+function renderMasterTab() {
+  const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
+
+  if (!approvedCreators.length) {
+    content.innerHTML = `
+      <div class="empty-state">
+        No creators approved yet.<br>
+        Head to the Review tab and start voting "Y" on creators to build your master list.
+      </div>
+    `;
+    return;
+  }
+
+  content.innerHTML = `
+    <p class="review-summary">${approvedCreators.length.toLocaleString()} creator${approvedCreators.length === 1 ? "" : "s"} approved so far, across every onboarding run.</p>
+    ${tableShell({
+      toolbar: `
+        <div class="src-toolbar">
+          <input type="search" id="master-search" placeholder="Search name or handle…">
+          <select id="master-filter-client"><option value="">All clients</option></select>
+          <select id="master-filter-gender"><option value="">All genders</option></select>
+        </div>
+      `,
+      columns: `
+        <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+        <th class="no-sort">Social</th>
+        <th class="sort" data-col="followers">Followers <span class="sort-icon"></span></th>
+        <th class="sort" data-col="vertical">Vertical <span class="sort-icon"></span></th>
+        <th class="no-sort">Demo</th>
+        <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+        <th class="no-sort">Remove</th>
+      `,
+      bodyId: "master-tbody",
+    })}
+  `;
+
+  const clientSel = document.getElementById("master-filter-client");
+  [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
+    clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+  const genderSel = document.getElementById("master-filter-gender");
+  [...new Set(approvedCreators.map(c => c.gender).filter(Boolean))].sort().forEach(v => {
+    genderSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+
+  let sortCol = "followers", sortDir = "desc";
+
+  function render() {
+    const q = document.getElementById("master-search").value.trim().toLowerCase();
+    const clientFilter = document.getElementById("master-filter-client").value;
+    const genderFilter = document.getElementById("master-filter-gender").value;
+
+    let rows = approvedCreators.filter(c => {
+      if (clientFilter && c.client !== clientFilter) return false;
+      if (genderFilter && c.gender !== genderFilter) return false;
+      if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (sortCol === "followers") { av = av || 0; bv = bv || 0; }
+      else { av = (av || "").toString().toLowerCase(); bv = (bv || "").toString().toLowerCase(); }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${approvedCreators.length.toLocaleString()} approved`;
+
+    document.getElementById("master-tbody").innerHTML = rows.length ? rows.map(c => `
+      <tr data-id="${escHtml(c.id)}">
+        <td class="name-cell">${escHtml(c.name)}</td>
+        <td>${socialCell(c)}</td>
+        <td>${fmtFollowers(c.followers)}</td>
+        <td>${c.vertical ? escHtml(c.vertical) : `<span class="dim">—</span>`}</td>
+        <td>${demoLine(c)}</td>
+        <td>${escHtml(c.client)}</td>
+        <td><button class="remove-btn" type="button">Remove</button></td>
+      </tr>
+    `).join("") : `<tr><td colspan="7" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+
+    document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
+    const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
+    if (activeTh) activeTh.textContent = sortDir === "asc" ? " ↑" : " ↓";
+
+    document.querySelectorAll(".remove-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.closest("tr").dataset.id;
+        decisions[id] = "no";
+        saveDecisions(decisions);
+        renderMasterTab();
+      });
+    });
+  }
+
+  document.querySelectorAll(".src-table th.sort").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = col === "followers" ? "desc" : "asc"; }
+      render();
+    });
+  });
+  ["master-search", "master-filter-client", "master-filter-gender"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  render();
+}
+
+renderActiveTab();
 </script>
 </body>
 </html>

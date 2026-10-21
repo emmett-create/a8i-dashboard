@@ -8,8 +8,8 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="header"></div>
 <section class="hero" style="padding-bottom:40px">
+<div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
     <div class="eyebrow">A8I &middot; 01</div>
     <h1>Onboarding</h1>
@@ -126,7 +126,7 @@ window.extractPdfText = async function extractPdfText(file) {
 </script>
 
 <script>
-document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "process.html" });
+document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
 
 // Dual-handle follower-size slider — steps map to real follower tiers rather

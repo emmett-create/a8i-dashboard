@@ -8,8 +8,8 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="header"></div>
 <section class="hero" style="padding-bottom:40px">
+<div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
     <div class="eyebrow">A8I Process &middot; 03</div>
     <h1>Gifting</h1>
@@ -39,7 +39,7 @@ const ROWS = [
     { text: "How do we handle regifts?", question: true },
   ]},
 ];
-document.getElementById("header").innerHTML = renderHeader({ onDark: false, back: "process.html" });
+document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
 document.getElementById("rows").innerHTML = renderRowList(ROWS);
 </script>
