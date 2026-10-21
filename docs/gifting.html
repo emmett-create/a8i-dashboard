@@ -11,37 +11,239 @@
 <section class="hero" style="padding-bottom:40px">
 <div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
-    <div class="eyebrow">A8I Process &middot; 03</div>
+    <div class="eyebrow">A8I &middot; 03</div>
     <h1>Gifting</h1>
-    <p class="sub">Our own gift application, and keeping it clean — no-matches, dupes, and regifts.</p>
+    <p class="sub">Our own gift application — approved creators from Sourcing, ready to ship.</p>
   </div>
 </section>
-<section class="section" style="padding-top:60px">
-  <div id="rows"></div>
-</section>
-<div id="footer"></div>
 
+<section class="section src-section" style="padding-top:60px">
+  <div class="src-label">Gift Application</div>
+  <p class="review-summary" id="ga-summary"></p>
+  <div id="content"></div>
+</section>
+
+<div class="overlay hidden" id="ga-edit-overlay">
+  <div class="modal-card">
+    <h3>Edit gift application</h3>
+    <p id="ga-edit-sub"></p>
+    <div class="field"><label>Email</label><input type="text" id="ga-ef-email" placeholder="creator@email.com"></div>
+    <div class="field"><label>Phone</label><input type="text" id="ga-ef-phone" placeholder="(555) 555-5555"></div>
+    <div class="field"><label>Shipping address</label><input type="text" id="ga-ef-shipping" placeholder="123 Main St, City, ST 00000"></div>
+    <div class="field"><label>Product</label><input type="text" id="ga-ef-product" placeholder="e.g. Hero bundle"></div>
+    <div class="field"><label>Notes</label><textarea id="ga-ef-notes" placeholder="Anything worth flagging…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="ga-edit-cancel">Cancel</button>
+      <button class="btn btn-solid" type="button" id="ga-edit-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="footer"></div>
 <script src="common.js"></script>
 <script>
-const ROWS = [
-  { num: 1, title: "Gift App", items: [
-    { text: "Build into system", children: [
-      { text: "Don't want to use Fillout — want our own thing" },
-    ]},
-    { text: "Draft 1 — minimal gift choice? No choice?", question: true },
-  ]},
-  { num: 2, title: "Cleaning Gift App", items: [
-    { text: "Clean no-matches automatically", children: [
-      { text: "Vetting true no-matches?", question: true },
-      { text: "Unique links so they can't dupe or leak the app?", annotation: "MCT", question: true },
-    ]},
-    { text: "Dupes?", question: true },
-    { text: "How do we handle regifts?", question: true },
-  ]},
-];
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
-document.getElementById("rows").innerHTML = renderRowList(ROWS);
+
+const KNOWN_KEY = "a8i_known_creators";
+const DECISIONS_KEY = "a8i_creator_decisions";
+const GIFT_KEY = "a8i_gift_applications";
+
+function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
+function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
+function loadGiftData() { try { return JSON.parse(localStorage.getItem(GIFT_KEY) || "{}"); } catch { return {}; } }
+function saveGiftData(d) { localStorage.setItem(GIFT_KEY, JSON.stringify(d)); }
+
+const STATUS_OPTIONS = ["Not placed", "Order placed", "Delivered"];
+
+function platLink(url, label) {
+  return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
+}
+function igCell(c) { return c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle) : `<span class="dim">—</span>`; }
+function ttCell(c) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle) : `<span class="dim">—</span>`; }
+function cellOr(v) { return v ? escHtml(v) : `<span class="dim">—</span>`; }
+function fmtDate(ts) { return ts ? new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"; }
+
+const known = loadKnown();
+const decisions = loadDecisions();
+let giftData = loadGiftData();
+const content = document.getElementById("content");
+
+// Approved creators from Sourcing are the applicant pool — standing in for
+// a real external intake form (what the paid system calls submissions),
+// since a8i doesn't have one of its own yet. Each gets seeded with an empty
+// editable application the first time it's seen here, backdated a few mock
+// days so the list doesn't look like everything "applied" in the same instant.
+const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
+let seeded = false;
+approvedCreators.forEach((c, i) => {
+  if (!giftData[c.id]) {
+    giftData[c.id] = {
+      email: "", phone: "", shipping: "", product: "", notes: "",
+      status: "Not placed",
+      submittedAt: Date.now() - ((i % 6) + 1) * 86400000,
+    };
+    seeded = true;
+  }
+});
+if (seeded) saveGiftData(giftData);
+
+if (!approvedCreators.length) {
+  document.getElementById("ga-summary").textContent = "";
+  content.innerHTML = `
+    <div class="empty-state">
+      No gift applications yet.<br>
+      <a href="sourcing.html">Approve some creators in Sourcing first &rarr;</a>
+    </div>
+  `;
+} else {
+  document.getElementById("ga-summary").textContent =
+    `${approvedCreators.length.toLocaleString()} approved creator${approvedCreators.length === 1 ? "" : "s"} from Sourcing, standing in for real gift-application submissions.`;
+
+  content.innerHTML = `
+    <div class="src-toolbar">
+      <input type="search" id="ga-search" placeholder="Search name or handle…">
+      <select id="ga-filter-client"><option value="">All clients</option></select>
+      <select id="ga-filter-status">
+        <option value="">All statuses</option>
+        ${STATUS_OPTIONS.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join("")}
+      </select>
+    </div>
+    <p class="src-shown-count" id="shown-count"></p>
+    <div class="src-table-wrap">
+      <table class="src-table gift-table">
+        <thead>
+          <tr>
+            <th class="no-sort"></th>
+            <th class="sort" data-col="submittedAt">Date <span class="sort-icon"></span></th>
+            <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+            <th class="no-sort">Instagram</th>
+            <th class="no-sort">TikTok</th>
+            <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+            <th class="no-sort">Email</th>
+            <th class="no-sort">Phone</th>
+            <th class="no-sort">Shipping Address</th>
+            <th class="no-sort">Product</th>
+            <th class="no-sort">Status</th>
+          </tr>
+        </thead>
+        <tbody id="ga-tbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  const clientSel = document.getElementById("ga-filter-client");
+  [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
+    clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+
+  let sortCol = "submittedAt", sortDir = "desc";
+
+  function render() {
+    const q = document.getElementById("ga-search").value.trim().toLowerCase();
+    const clientFilter = document.getElementById("ga-filter-client").value;
+    const statusFilter = document.getElementById("ga-filter-status").value;
+
+    let rows = approvedCreators.filter(c => {
+      const g = giftData[c.id] || {};
+      if (clientFilter && c.client !== clientFilter) return false;
+      if (statusFilter && g.status !== statusFilter) return false;
+      if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      const ga = giftData[a.id] || {}, gb = giftData[b.id] || {};
+      let av = sortCol === "submittedAt" ? ga.submittedAt : a[sortCol];
+      let bv = sortCol === "submittedAt" ? gb.submittedAt : b[sortCol];
+      if (sortCol === "submittedAt") { av = av || 0; bv = bv || 0; }
+      else { av = (av || "").toString().toLowerCase(); bv = (bv || "").toString().toLowerCase(); }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${approvedCreators.length.toLocaleString()} applications`;
+
+    document.getElementById("ga-tbody").innerHTML = rows.length ? rows.map(c => {
+      const g = giftData[c.id] || {};
+      return `
+        <tr data-id="${escHtml(c.id)}">
+          <td><button class="btn-icon ga-edit-btn" type="button" title="Edit email, shipping, product, notes">&#9998;</button></td>
+          <td class="dim">${fmtDate(g.submittedAt)}</td>
+          <td class="name-cell">${escHtml(c.name)}</td>
+          <td>${igCell(c)}</td>
+          <td>${ttCell(c)}</td>
+          <td>${escHtml(c.client)}</td>
+          <td>${cellOr(g.email)}</td>
+          <td>${cellOr(g.phone)}</td>
+          <td>${cellOr(g.shipping)}</td>
+          <td>${cellOr(g.product)}</td>
+          <td><select class="status-select ga-status-sel" data-id="${escHtml(c.id)}">${STATUS_OPTIONS.map(s => `<option value="${escHtml(s)}"${s === g.status ? " selected" : ""}>${escHtml(s)}</option>`).join("")}</select></td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No applications match these filters.</td></tr>`;
+
+    document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
+    const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
+    if (activeTh) activeTh.textContent = sortDir === "asc" ? " ↑" : " ↓";
+
+    document.querySelectorAll(".ga-edit-btn").forEach(btn => {
+      btn.addEventListener("click", () => openEditModal(btn.closest("tr").dataset.id));
+    });
+    document.querySelectorAll(".ga-status-sel").forEach(sel => {
+      sel.addEventListener("change", () => {
+        giftData[sel.dataset.id] = { ...(giftData[sel.dataset.id] || {}), status: sel.value };
+        saveGiftData(giftData);
+      });
+    });
+  }
+
+  document.querySelectorAll(".src-table th.sort").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = col === "submittedAt" ? "desc" : "asc"; }
+      render();
+    });
+  });
+  ["ga-search", "ga-filter-client", "ga-filter-status"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  render();
+
+  // ── Edit modal ───────────────────────────────────────────────────────
+  const overlay = document.getElementById("ga-edit-overlay");
+  let editingId = null;
+  function openEditModal(id) {
+    const c = known[id];
+    const g = giftData[id] || {};
+    editingId = id;
+    document.getElementById("ga-edit-sub").textContent = `${c.name} — @${c.ig_handle || c.tt_handle || "no handle"}`;
+    document.getElementById("ga-ef-email").value = g.email || "";
+    document.getElementById("ga-ef-phone").value = g.phone || "";
+    document.getElementById("ga-ef-shipping").value = g.shipping || "";
+    document.getElementById("ga-ef-product").value = g.product || "";
+    document.getElementById("ga-ef-notes").value = g.notes || "";
+    overlay.classList.remove("hidden");
+  }
+  document.getElementById("ga-edit-cancel").addEventListener("click", () => overlay.classList.add("hidden"));
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.add("hidden"); });
+  document.getElementById("ga-edit-save").addEventListener("click", () => {
+    giftData[editingId] = {
+      ...(giftData[editingId] || {}),
+      email: document.getElementById("ga-ef-email").value.trim(),
+      phone: document.getElementById("ga-ef-phone").value.trim(),
+      shipping: document.getElementById("ga-ef-shipping").value.trim(),
+      product: document.getElementById("ga-ef-product").value.trim(),
+      notes: document.getElementById("ga-ef-notes").value.trim(),
+    };
+    saveGiftData(giftData);
+    overlay.classList.add("hidden");
+    render();
+  });
+}
 </script>
 </body>
 </html>
