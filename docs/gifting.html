@@ -68,11 +68,13 @@ function stageColorClass(stages, value, negatives = []) {
   return "stage-amber";
 }
 
-function platLink(url, label) {
-  return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
+function platLink(url, label, isDup) {
+  if (!url) return `<span class="dim">—</span>`;
+  const link = `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>`;
+  return isDup ? `<span class="handle-dup" title="Same handle appears more than once in this list">${link}</span>` : link;
 }
-function igCell(c) { return c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle) : `<span class="dim">—</span>`; }
-function ttCell(c) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle) : `<span class="dim">—</span>`; }
+function igCell(c, isDup) { return c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle, isDup) : `<span class="dim">—</span>`; }
+function ttCell(c, isDup) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle, isDup) : `<span class="dim">—</span>`; }
 function cellOr(v) { return v ? escHtml(v) : `<span class="dim">—</span>`; }
 function fmtDate(ts) { return ts ? new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"; }
 
@@ -194,16 +196,29 @@ if (!approvedCreators.length) {
 
     const orders = loadOrders();
 
+    // Gift app cleanup: flag a handle that appears more than once across
+    // every approved application — not just the filtered view, since a dupe
+    // elsewhere in the list is still worth knowing about.
+    const igCounts = {}, ttCounts = {};
+    approvedCreators.forEach(c => {
+      const ig = (c.ig_handle || "").trim().toLowerCase();
+      const tt = (c.tt_handle || "").trim().toLowerCase();
+      if (ig) igCounts[ig] = (igCounts[ig] || 0) + 1;
+      if (tt) ttCounts[tt] = (ttCounts[tt] || 0) + 1;
+    });
+
     document.getElementById("ga-tbody").innerHTML = rows.length ? rows.map(c => {
       const g = giftData[c.id] || {};
       const alreadySent = !!orders[c.id];
+      const igDup = c.ig_handle && igCounts[c.ig_handle.trim().toLowerCase()] > 1;
+      const ttDup = c.tt_handle && ttCounts[c.tt_handle.trim().toLowerCase()] > 1;
       return `
         <tr data-id="${escHtml(c.id)}">
           <td><button class="btn-icon ga-edit-btn" type="button" title="Edit email, shipping, product, notes">&#9998;</button></td>
           <td class="dim">${fmtDate(g.submittedAt)}</td>
           <td class="name-cell">${escHtml(c.name)}</td>
-          <td>${igCell(c)}</td>
-          <td>${ttCell(c)}</td>
+          <td>${igCell(c, igDup)}</td>
+          <td>${ttCell(c, ttDup)}</td>
           <td>${escHtml(c.client)}</td>
           <td>${cellOr(g.email)}</td>
           <td>${cellOr(g.phone)}</td>

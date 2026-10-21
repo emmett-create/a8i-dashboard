@@ -11,25 +11,108 @@
 <section class="hero" style="padding-bottom:40px">
 <div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
-    <div class="eyebrow">A8I Process &middot; 07</div>
+    <div class="eyebrow">A8I &middot; 07</div>
     <h1>Reporting</h1>
   </div>
 </section>
-<section class="section" style="padding-top:60px">
-  <div id="rows"></div>
-</section>
-<div id="footer"></div>
 
+<section class="section src-section" style="padding-top:60px">
+  <div class="src-label">Pipeline Overview</div>
+  <p class="review-summary" id="rp-summary"></p>
+  <div id="content"></div>
+</section>
+
+<div id="footer"></div>
 <script src="common.js"></script>
 <script>
-const ROWS = [
-  { num: 1, title: "Reporting", items: [
-    { text: "Dashboard, like Magna" },
-  ]},
-];
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
-document.getElementById("rows").innerHTML = renderRowList(ROWS);
+
+function loadJSON(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch { return {}; } }
+
+const known = loadJSON("a8i_known_creators");
+const decisions = loadJSON("a8i_creator_decisions");
+const giftData = loadJSON("a8i_gift_applications");
+const tracking = loadJSON("a8i_tracking_status");
+
+const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
+const content = document.getElementById("content");
+
+if (!approvedCreators.length) {
+  document.getElementById("rp-summary").textContent = "";
+  content.innerHTML = `
+    <div class="empty-state">
+      Nothing to report on yet.<br>
+      <a href="sourcing.html">Approve some creators in Sourcing first &rarr;</a>
+    </div>
+  `;
+} else {
+  document.getElementById("rp-summary").textContent =
+    `Pulled live from every approved creator's actual Gifting, Order Placement, and Tracking status — nothing here is a separate, hand-entered number.`;
+
+  const ordersPlaced = approvedCreators.filter(c => giftData[c.id] && giftData[c.id].status !== "Not placed").length;
+  const delivered = approvedCreators.filter(c => giftData[c.id]?.status === "Delivered").length;
+  const outreachSent = approvedCreators.filter(c => tracking[c.id]?.outreach && tracking[c.id].outreach !== "Not started").length;
+  const contentLive = approvedCreators.filter(c => tracking[c.id]?.posting === "Live").length;
+
+  const kpis = [
+    { label: "Approved Creators", value: approvedCreators.length },
+    { label: "Gift Applications", value: approvedCreators.filter(c => giftData[c.id]).length },
+    { label: "Outreach Sent", value: outreachSent },
+    { label: "Orders Placed", value: ordersPlaced },
+    { label: "Delivered", value: delivered },
+    { label: "Content Live", value: contentLive },
+  ];
+
+  const clients = [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort();
+  const byClient = clients.map(client => {
+    const rows = approvedCreators.filter(c => c.client === client);
+    return {
+      client,
+      approved: rows.length,
+      ordersPlaced: rows.filter(c => giftData[c.id] && giftData[c.id].status !== "Not placed").length,
+      delivered: rows.filter(c => giftData[c.id]?.status === "Delivered").length,
+      live: rows.filter(c => tracking[c.id]?.posting === "Live").length,
+    };
+  });
+
+  content.innerHTML = `
+    <div class="kpi-grid">
+      ${kpis.map(k => `
+        <div class="kpi-tile">
+          <div class="kpi-value">${k.value.toLocaleString()}</div>
+          <div class="kpi-label">${escHtml(k.label)}</div>
+        </div>
+      `).join("")}
+    </div>
+
+    <div class="src-label" style="margin-top:10px">By Client</div>
+    <div class="src-table-wrap">
+      <table class="src-table client-report-table">
+        <thead>
+          <tr>
+            <th class="no-sort">Client</th>
+            <th class="no-sort">Approved</th>
+            <th class="no-sort">Orders Placed</th>
+            <th class="no-sort">Delivered</th>
+            <th class="no-sort">Content Live</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${byClient.map(r => `
+            <tr>
+              <td class="name-cell">${escHtml(r.client)}</td>
+              <td class="num-cell">${r.approved.toLocaleString()}</td>
+              <td class="num-cell">${r.ordersPlaced.toLocaleString()}</td>
+              <td class="num-cell">${r.delivered.toLocaleString()}</td>
+              <td class="num-cell">${r.live.toLocaleString()}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
 </script>
 </body>
 </html>

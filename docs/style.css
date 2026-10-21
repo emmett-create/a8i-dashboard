@@ -345,6 +345,7 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
 .src-table td.num-cell { font-variant-numeric: tabular-nums; }
 .src-table a.plat-link { color: var(--red); text-decoration: none; font-weight: 600; }
 .src-table a.plat-link:hover { text-decoration: underline; }
+.src-table .handle-dup { background: rgba(202,1,0,.1); border: 1px solid var(--red); padding: 2px 6px; display: inline-block; }
 .src-table .dim { color: var(--dim); }
 .src-table .yn-cell { display: flex; gap: 6px; }
 
@@ -414,6 +415,24 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
 .src-table.order-table th:nth-child(6), .src-table.order-table td:nth-child(6) { width: 13%; }
 .src-table.order-table th:nth-child(7), .src-table.order-table td:nth-child(7) { width: 15%; }
 .src-table.order-table th:nth-child(8), .src-table.order-table td:nth-child(8) { width: 15%; }
+
+/* ── Reporting (same red-box treatment as the hub's area-card grid —
+   cards are transparent windows onto a shared red fill, divided by a
+   faint white border rather than a gap). ──────────────────────────── */
+.kpi-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+  background: var(--red); margin-bottom: 44px;
+}
+@media (max-width: 700px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+.kpi-tile { color: var(--white); border: 1px solid rgba(255,255,255,.18); padding: 30px 26px; }
+.kpi-tile .kpi-value { font-family: var(--display); font-size: 40px; font-weight: 650; line-height: 1; margin-bottom: 10px; }
+.kpi-tile .kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: rgba(255,255,255,.72); }
+
+.src-table.client-report-table th:nth-child(1), .src-table.client-report-table td:nth-child(1) { width: 40%; }
+.src-table.client-report-table th:nth-child(2), .src-table.client-report-table td:nth-child(2),
+.src-table.client-report-table th:nth-child(3), .src-table.client-report-table td:nth-child(3),
+.src-table.client-report-table th:nth-child(4), .src-table.client-report-table td:nth-child(4),
+.src-table.client-report-table th:nth-child(5), .src-table.client-report-table td:nth-child(5) { width: 15%; text-align: right; }
 
 .btn-icon {
   width: 26px; height: 26px; border: 1.5px solid var(--line); border-radius: 0; background: var(--white);
