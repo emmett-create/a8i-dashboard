@@ -40,8 +40,13 @@ function renderHeader({ onDark = true, back = null } = {}) {
     const el = document.querySelector(".site-header");
     if (!el || el.dataset.stickyBound) return;
     el.dataset.stickyBound = "1";
-    const onScroll = () => el.classList.toggle("scrolled", window.scrollY > 40);
+    const hero = document.querySelector(".hero");
+    const onScroll = () => {
+      const pastHero = hero ? window.scrollY > hero.offsetHeight - 70 : false;
+      el.classList.toggle("past-hero", pastHero);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
     onScroll();
   });
   return `
