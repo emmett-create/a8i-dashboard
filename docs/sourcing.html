@@ -21,6 +21,7 @@
   <div class="src-tabs" id="src-tabs">
     <button class="src-tab active" data-tab="review" type="button">Review</button>
     <button class="src-tab" data-tab="master" type="button">Master List</button>
+    <button class="src-tab" data-tab="tracking" type="button">Tracking</button>
   </div>
   <div id="content"></div>
 </section>
@@ -33,13 +34,21 @@ document.getElementById("footer").innerHTML = renderFooter();
 
 const DECISIONS_KEY = "a8i_creator_decisions";
 const KNOWN_KEY = "a8i_known_creators";
+const TRACKING_KEY = "a8i_tracking_status";
 
 function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
 function saveDecisions(d) { localStorage.setItem(DECISIONS_KEY, JSON.stringify(d)); }
 function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
 function saveKnown(k) { localStorage.setItem(KNOWN_KEY, JSON.stringify(k)); }
+function loadTracking() { try { return JSON.parse(localStorage.getItem(TRACKING_KEY) || "{}"); } catch { return {}; } }
+function saveTracking(t) { localStorage.setItem(TRACKING_KEY, JSON.stringify(t)); }
 
 let decisions = loadDecisions();
+let tracking = loadTracking();
+
+const OUTREACH_STAGES = ["Not started", "Sent", "Responded", "Confirmed", "Declined"];
+const GIFTING_STAGES = ["Not started", "Order placed", "Shipped", "Delivered"];
+const POSTING_STAGES = ["Not started", "Content due", "Posted", "Live"];
 
 function fmtFollowers(n) {
   if (n == null) return "—";
@@ -91,15 +100,16 @@ tabs.forEach(btn => {
 
 function renderActiveTab() {
   if (activeTab === "review") renderReviewTab();
-  else renderMasterTab();
+  else if (activeTab === "master") renderMasterTab();
+  else renderTrackingTab();
 }
 
-function tableShell({ toolbar, columns, bodyId }) {
+function tableShell({ toolbar, columns, bodyId, extraClass = "" }) {
   return `
     ${toolbar}
     <p class="src-shown-count" id="shown-count"></p>
     <div class="src-table-wrap">
-      <table class="src-table">
+      <table class="src-table ${extraClass}">
         <thead><tr>${columns}</tr></thead>
         <tbody id="${bodyId}"></tbody>
       </table>
@@ -370,6 +380,112 @@ function renderMasterTab() {
     });
   });
   ["master-search", "master-filter-client", "master-filter-gender"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  render();
+}
+
+// ── Tab 3: Tracking (outreach / gifting / posting status per approved creator,
+// mirrors the Status columns on the real Google Sheets master lists) ──────
+function statusOptions(stages, current) {
+  return stages.map(s => `<option value="${escHtml(s)}"${s === current ? " selected" : ""}>${escHtml(s)}</option>`).join("");
+}
+function fmtUpdated(ts) {
+  if (!ts) return `<span class="dim">—</span>`;
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function renderTrackingTab() {
+  const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
+
+  if (!approvedCreators.length) {
+    content.innerHTML = `
+      <div class="empty-state">
+        No creators approved yet.<br>
+        Head to the Review tab and start voting "Y" — approved creators show up here for status tracking.
+      </div>
+    `;
+    return;
+  }
+
+  content.innerHTML = `
+    <p class="review-summary">Outreach, gifting, and posting status for every approved creator — update statuses as a program moves along.</p>
+    ${tableShell({
+      toolbar: `
+        <div class="src-toolbar">
+          <input type="search" id="track-search" placeholder="Search name or handle…">
+          <select id="track-filter-client"><option value="">All clients</option></select>
+        </div>
+      `,
+      columns: `
+        <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+        <th class="no-sort">Social</th>
+        <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+        <th class="no-sort">Outreach</th>
+        <th class="no-sort">Gifting</th>
+        <th class="no-sort">Posting</th>
+        <th class="no-sort">Updated</th>
+      `,
+      bodyId: "track-tbody",
+      extraClass: "track-table",
+    })}
+  `;
+
+  const clientSel = document.getElementById("track-filter-client");
+  [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
+    clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+
+  let sortCol = "name", sortDir = "asc";
+
+  function render() {
+    const q = document.getElementById("track-search").value.trim().toLowerCase();
+    const clientFilter = document.getElementById("track-filter-client").value;
+
+    let rows = approvedCreators.filter(c => {
+      if (clientFilter && c.client !== clientFilter) return false;
+      if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      let av = (a[sortCol] || "").toString().toLowerCase(), bv = (b[sortCol] || "").toString().toLowerCase();
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${approvedCreators.length.toLocaleString()} approved`;
+
+    document.getElementById("track-tbody").innerHTML = rows.length ? rows.map(c => {
+      const t = tracking[c.id] || {};
+      return `
+        <tr data-id="${escHtml(c.id)}">
+          <td class="name-cell">${escHtml(c.name)}</td>
+          <td>${socialCell(c)}</td>
+          <td>${escHtml(c.client)}</td>
+          <td><select class="status-select" data-field="outreach">${statusOptions(OUTREACH_STAGES, t.outreach)}</select></td>
+          <td><select class="status-select" data-field="gifting">${statusOptions(GIFTING_STAGES, t.gifting)}</select></td>
+          <td><select class="status-select" data-field="posting">${statusOptions(POSTING_STAGES, t.posting)}</select></td>
+          <td class="updated-cell">${fmtUpdated(t.updatedAt)}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="7" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+
+    document.querySelectorAll(".status-select").forEach(sel => {
+      sel.addEventListener("change", () => {
+        const row = sel.closest("tr");
+        const id = row.dataset.id;
+        const field = sel.dataset.field;
+        tracking[id] = { ...(tracking[id] || {}), [field]: sel.value, updatedAt: Date.now() };
+        saveTracking(tracking);
+        row.querySelector(".updated-cell").innerHTML = fmtUpdated(tracking[id].updatedAt);
+      });
+    });
+  }
+
+  ["track-search", "track-filter-client"].forEach(id => {
     document.getElementById(id).addEventListener("input", render);
   });
 

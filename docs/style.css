@@ -299,6 +299,22 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
 }
 .remove-btn:hover { background: var(--red); color: var(--white); border-color: var(--red); }
 
+.src-table.track-table th:nth-child(1), .src-table.track-table td:nth-child(1) { width: 17%; }
+.src-table.track-table th:nth-child(2), .src-table.track-table td:nth-child(2) { width: 17%; }
+.src-table.track-table th:nth-child(3), .src-table.track-table td:nth-child(3) { width: 14%; }
+.src-table.track-table th:nth-child(4), .src-table.track-table td:nth-child(4) { width: 16%; }
+.src-table.track-table th:nth-child(5), .src-table.track-table td:nth-child(5) { width: 16%; }
+.src-table.track-table th:nth-child(6), .src-table.track-table td:nth-child(6) { width: 13%; }
+.src-table.track-table th:nth-child(7), .src-table.track-table td:nth-child(7) { width: 7%; }
+
+.status-select {
+  width: 100%; font-family: var(--display); font-size: 12px; font-weight: 600; color: var(--black);
+  padding: 7px 8px; border: 1.5px solid var(--line); border-radius: 7px; background: var(--white);
+  outline: none; cursor: pointer;
+}
+.status-select:focus { border-color: var(--red); }
+.updated-cell { font-size: 12px; color: var(--dim); }
+
 .empty-state { text-align: center; padding: 60px 20px; color: var(--dim); }
 .empty-state a { color: var(--red); font-weight: 700; }
 
