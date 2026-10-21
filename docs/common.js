@@ -34,6 +34,16 @@ function renderRowList(rows) {
 }
 
 function renderHeader({ onDark = true, back = null } = {}) {
+  // Fixed-position header is inserted after this returns, so the listener
+  // has to wait a frame before the element actually exists in the DOM.
+  requestAnimationFrame(() => {
+    const el = document.querySelector(".site-header");
+    if (!el || el.dataset.stickyBound) return;
+    el.dataset.stickyBound = "1";
+    const onScroll = () => el.classList.toggle("scrolled", window.scrollY > 40);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  });
   return `
     <header class="site-header ${onDark ? "on-dark" : ""}">
       ${back
