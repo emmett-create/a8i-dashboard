@@ -225,8 +225,14 @@ def follower_matches(f_min, f_max, value):
     return "match" if lo <= value <= hi else "no_match"
 
 def classify(creator: dict, criteria: dict, generic_words: set) -> dict:
+    # What they're gifting is a real fit signal too — a vegan-protein gift
+    # should weight fitness/wellness creators higher than a skincare gift
+    # would, independent of anything else matching. Folded into the same
+    # free-text vertical match as the description rather than scored
+    # separately, so it benefits from the same generic-word filtering.
+    vertical_text = f"{criteria.get('description', '')} {criteria.get('product', '')}"
     checks = {
-        "vertical": vertical_matches(criteria.get("description", ""), creator["vertical"], creator["archetype"], generic_words),
+        "vertical": vertical_matches(vertical_text, creator["vertical"], creator["archetype"], generic_words),
         "location": location_matches(criteria.get("location", ""), creator["location"]),
         "gender": gender_matches(criteria.get("gender", ""), creator["gender"]),
         "age": age_matches(criteria.get("age", ""), creator["age"]),
