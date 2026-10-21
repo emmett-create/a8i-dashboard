@@ -127,6 +127,7 @@ if (!approvedCreators.length) {
         <option value="">All statuses</option>
         ${STATUS_OPTIONS.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join("")}
       </select>
+      <select id="ga-filter-product"><option value="">All products</option></select>
     </div>
     <p class="src-shown-count" id="shown-count"></p>
     <div class="src-table-wrap">
@@ -144,7 +145,7 @@ if (!approvedCreators.length) {
             <th class="no-sort">Shipping Address</th>
             <th class="no-sort">Product</th>
             <th class="no-sort">Status</th>
-            <th class="no-sort"></th>
+            <th class="no-sort">Send to Place?</th>
           </tr>
         </thead>
         <tbody id="ga-tbody"></tbody>
@@ -156,6 +157,10 @@ if (!approvedCreators.length) {
   [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
     clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
   });
+  const productSel = document.getElementById("ga-filter-product");
+  [...new Set(approvedCreators.map(c => (giftData[c.id] || {}).product).filter(Boolean))].sort().forEach(v => {
+    productSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
 
   let sortCol = "submittedAt", sortDir = "desc";
 
@@ -163,11 +168,13 @@ if (!approvedCreators.length) {
     const q = document.getElementById("ga-search").value.trim().toLowerCase();
     const clientFilter = document.getElementById("ga-filter-client").value;
     const statusFilter = document.getElementById("ga-filter-status").value;
+    const productFilter = document.getElementById("ga-filter-product").value;
 
     let rows = approvedCreators.filter(c => {
       const g = giftData[c.id] || {};
       if (clientFilter && c.client !== clientFilter) return false;
       if (statusFilter && g.status !== statusFilter) return false;
+      if (productFilter && g.product !== productFilter) return false;
       if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -248,7 +255,7 @@ if (!approvedCreators.length) {
       render();
     });
   });
-  ["ga-search", "ga-filter-client", "ga-filter-status"].forEach(id => {
+  ["ga-search", "ga-filter-client", "ga-filter-status", "ga-filter-product"].forEach(id => {
     document.getElementById(id).addEventListener("input", render);
   });
 
