@@ -42,13 +42,6 @@ function saveGiftData(d) { localStorage.setItem(GIFT_KEY, JSON.stringify(d)); }
 
 const ORDER_STAGES = ["Pending", "Ordered"];
 
-function stageColorClass(stages, value, negatives = []) {
-  if (negatives.includes(value)) return "stage-muted";
-  const idx = stages.indexOf(value);
-  if (idx <= 0) return "stage-red";
-  if (idx === stages.length - 1) return "stage-green";
-  return "stage-amber";
-}
 function platLink(url, label) {
   return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
 }
@@ -102,6 +95,7 @@ if (!orderRows.length) {
             <th class="no-sort">Product</th>
             <th class="no-sort">Notes</th>
             <th class="no-sort">Status</th>
+            <th class="no-sort"></th>
           </tr>
         </thead>
         <tbody id="op-tbody"></tbody>
@@ -165,7 +159,9 @@ if (!orderRows.length) {
     currentRows = rows;
     document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${orderRows.length.toLocaleString()} queued`;
 
-    document.getElementById("op-tbody").innerHTML = rows.length ? rows.map(r => `
+    document.getElementById("op-tbody").innerHTML = rows.length ? rows.map(r => {
+      const ordered = r.orderStatus === "Ordered";
+      return `
       <tr data-id="${escHtml(r.id)}">
         <td class="dim">${fmtDate(r.sentAt)}</td>
         <td class="name-cell">${escHtml(r.creator.name)}</td>
@@ -174,9 +170,11 @@ if (!orderRows.length) {
         <td>${cellOr(r.shipping)}</td>
         <td>${cellOr(r.product)}</td>
         <td>${cellOr(r.notes)}</td>
-        <td><select class="status-select op-status-sel ${stageColorClass(ORDER_STAGES, r.orderStatus)}" data-id="${escHtml(r.id)}">${ORDER_STAGES.map(s => `<option value="${escHtml(s)}"${s === r.orderStatus ? " selected" : ""}>${escHtml(s)}</option>`).join("")}</select></td>
+        <td>${ordered ? `<span style="color:var(--green);font-weight:700">&#10003; Ordered</span>` : `<span class="dim">Not placed</span>`}</td>
+        <td>${ordered ? "" : `<button class="btn btn-solid op-place-btn" type="button" data-id="${escHtml(r.id)}" style="padding:8px 16px;font-size:11px">Place Order</button>`}</td>
       </tr>
-    `).join("") : `<tr><td colspan="8" class="dim" style="text-align:center;padding:30px">No orders match these filters.</td></tr>`;
+    `;
+    }).join("") : `<tr><td colspan="9" class="dim" style="text-align:center;padding:30px">No orders match these filters.</td></tr>`;
 
     document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
     const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
@@ -184,19 +182,20 @@ if (!orderRows.length) {
 
     // Placing an order here is the trigger — flips this row's own status AND
     // writes "Order placed" straight back into the Gifting record so the two
-    // pages never have to be reconciled by hand.
-    document.querySelectorAll(".op-status-sel").forEach(sel => {
-      sel.addEventListener("change", () => {
-        const id = sel.dataset.id;
-        orders[id] = { ...(orders[id] || {}), orderStatus: sel.value, placedAt: sel.value === "Ordered" ? Date.now() : orders[id]?.placedAt };
+    // pages never have to be reconciled by hand. Same interaction as the
+    // paid system's own Gift Application tab: a "Place Order" button, not a
+    // status dropdown — once placed there's nothing left to change by hand.
+    document.querySelectorAll(".op-place-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.id;
+        orders[id] = { ...(orders[id] || {}), orderStatus: "Ordered", placedAt: Date.now() };
         saveOrders(orders);
-        sel.className = `status-select op-status-sel ${stageColorClass(ORDER_STAGES, sel.value)}`;
 
-        if (sel.value === "Ordered") {
-          const giftData = loadGiftData();
-          giftData[id] = { ...(giftData[id] || {}), status: "Order placed" };
-          saveGiftData(giftData);
-        }
+        const giftData = loadGiftData();
+        giftData[id] = { ...(giftData[id] || {}), status: "Order placed" };
+        saveGiftData(giftData);
+
+        render();
       });
     });
   }

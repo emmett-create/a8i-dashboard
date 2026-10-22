@@ -143,7 +143,6 @@ if (!approvedCreators.length) {
             <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
             <th class="no-sort">Instagram</th>
             <th class="no-sort">TikTok</th>
-            <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
             <th class="no-sort">Email</th>
             <th class="no-sort">Phone</th>
             <th class="no-sort">Shipping Address</th>
@@ -221,7 +220,6 @@ if (!approvedCreators.length) {
           <td class="name-cell">${escHtml(c.name)}</td>
           <td>${igCell(c, igDup)}</td>
           <td>${ttCell(c, ttDup)}</td>
-          <td>${escHtml(c.client)}</td>
           <td>${cellOr(g.email)}</td>
           <td>${cellOr(g.phone)}</td>
           <td>${cellOr(g.shipping)}</td>
@@ -230,7 +228,7 @@ if (!approvedCreators.length) {
           <td><button class="btn-icon ga-send-order-btn" type="button" data-id="${escHtml(c.id)}" title="${alreadySent ? "Already sent — click to resend the latest details" : "Send to Order Placement"}">${alreadySent ? "&#10003;" : "&rarr;"}</button></td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="12" class="dim" style="text-align:center;padding:30px">No applications match these filters.</td></tr>`;
+    }).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No applications match these filters.</td></tr>`;
 
     document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
     const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
