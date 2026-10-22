@@ -38,11 +38,13 @@
   </div>
 </div>
 
+<div id="page-nav"></div>
 <div id="footer"></div>
 <script src="common.js"></script>
 <script>
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
+document.getElementById("page-nav").innerHTML = renderPageNav("gifting");
 
 const KNOWN_KEY = "a8i_known_creators";
 const DECISIONS_KEY = "a8i_creator_decisions";

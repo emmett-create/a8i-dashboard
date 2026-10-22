@@ -50,11 +50,13 @@
   </div>
 </div>
 
+<div id="page-nav"></div>
 <div id="footer"></div>
 <script src="common.js"></script>
 <script>
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
+document.getElementById("page-nav").innerHTML = renderPageNav("content-tracking");
 
 function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return fallback; } }
 function saveJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }

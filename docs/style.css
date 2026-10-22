@@ -462,6 +462,14 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
   border-radius: 0; background: var(--white); color: var(--black); outline: none;
 }
 .report-toolbar input[type=date]:focus { border-color: var(--red); }
+.report-toolbar select {
+  font-family: var(--display); font-size: 13px; font-weight: 600; padding: 10px 30px 10px 14px; border: 1.5px solid var(--line);
+  border-radius: 0; background: var(--white); color: var(--black); outline: none; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23CA0100' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.report-toolbar select:focus { border-color: var(--red); }
 
 /* ── Top engaged posts ──────────────────────────────────────────────── */
 .top-posts-card { background: var(--white); border: 1px solid var(--line); padding: 26px 28px; margin-bottom: 40px; }
@@ -564,6 +572,25 @@ table.weekly-table { border-collapse: collapse; width: 100%; table-layout: fixed
 
 /* ── Footer ─────────────────────────────────────────────────────────── */
 .site-footer { padding: 30px 40px 50px; text-align: center; font-size: 11px; color: var(--dim); }
+
+/* ── Previous/Next page nav — fixed to the left/right viewport edges, near
+   the bottom (not vertically centered — on a short page that would land on
+   top of the hero text), one page in the Our Process order at a time. */
+.page-nav {
+  position: fixed; bottom: 24px; z-index: 90;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--red); color: var(--white);
+  padding: 12px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  transition: filter .15s ease;
+}
+.page-nav:hover { filter: brightness(1.1); }
+.page-nav-prev { left: 0; border-radius: 0 999px 999px 0; }
+.page-nav-next { right: 0; border-radius: 999px 0 0 999px; }
+.page-nav-arrow { font-size: 14px; }
+@media (max-width: 900px) {
+  .page-nav-label { display: none; }
+  .page-nav { padding: 12px 10px; }
+}
 
 /* ── Splash / landing page ──────────────────────────────────────────── */
 html, body { height: 100%; }

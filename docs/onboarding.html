@@ -106,6 +106,7 @@
   </div>
 </div>
 
+<div id="page-nav"></div>
 <div id="footer"></div>
 <script src="common.js"></script>
 
@@ -132,6 +133,7 @@ window.extractPdfText = async function extractPdfText(file) {
 <script>
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
+document.getElementById("page-nav").innerHTML = renderPageNav("onboarding");
 
 // Dual-handle follower-size slider — steps map to real follower tiers rather
 // than a linear 0–100 scale, since the gap between e.g. 1M and 5M matters a

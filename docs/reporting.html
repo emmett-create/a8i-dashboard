@@ -23,11 +23,13 @@
 </section>
 
 <div id="chart-tooltip"></div>
+<div id="page-nav"></div>
 <div id="footer"></div>
 <script src="common.js"></script>
 <script>
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
+document.getElementById("page-nav").innerHTML = renderPageNav("reporting");
 
 function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return fallback; } }
 

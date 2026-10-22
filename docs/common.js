@@ -63,6 +63,29 @@ function renderHeader({ onDark = true, back = null } = {}) {
   `;
 }
 
+// Shared order for the Previous/Next page nav — matches the "A8I · 0N"
+// numbering already used in each area page's eyebrow.
+const AREA_PAGES = [
+  { id: "onboarding",       title: "Onboarding",       href: "onboarding.html" },
+  { id: "sourcing",         title: "Sourcing",         href: "sourcing.html" },
+  { id: "gifting",          title: "Gifting",          href: "gifting.html" },
+  { id: "outreach",         title: "Outreach",         href: "outreach.html" },
+  { id: "order-placement",  title: "Order Placement",  href: "order-placement.html" },
+  { id: "content-tracking", title: "Content Tracking", href: "content-tracking.html" },
+  { id: "reporting",        title: "Reporting",        href: "reporting.html" },
+];
+
+function renderPageNav(currentId) {
+  const idx = AREA_PAGES.findIndex(p => p.id === currentId);
+  if (idx === -1) return "";
+  const prev = idx > 0 ? AREA_PAGES[idx - 1] : null;
+  const next = idx < AREA_PAGES.length - 1 ? AREA_PAGES[idx + 1] : null;
+  return `
+    ${prev ? `<a class="page-nav page-nav-prev" href="${prev.href}"><span class="page-nav-arrow">&larr;</span><span class="page-nav-label">${escHtml(prev.title)}</span></a>` : ""}
+    ${next ? `<a class="page-nav page-nav-next" href="${next.href}"><span class="page-nav-label">${escHtml(next.title)}</span><span class="page-nav-arrow">&rarr;</span></a>` : ""}
+  `;
+}
+
 function getSessionId() {
   let id = localStorage.getItem("a8i_session_id");
   if (!id) {
