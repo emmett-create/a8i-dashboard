@@ -32,13 +32,17 @@ document.getElementById("footer").innerHTML = renderFooter();
 
 const DECISIONS_KEY = "a8i_creator_decisions";
 const KNOWN_KEY = "a8i_known_creators";
+const CAMPAIGNS_KEY = "a8i_campaigns";
 
 function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
 function saveDecisions(d) { localStorage.setItem(DECISIONS_KEY, JSON.stringify(d)); }
 function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
 function saveKnown(k) { localStorage.setItem(KNOWN_KEY, JSON.stringify(k)); }
+function loadCampaigns() { try { return JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || "{}"); } catch { return {}; } }
+function saveCampaigns(c) { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(c)); }
 
 let decisions = loadDecisions();
+let campaigns = loadCampaigns();
 
 function fmtFollowers(n) {
   return n == null ? "—" : n.toLocaleString();
@@ -382,6 +386,7 @@ function renderMasterTab() {
           <input type="search" id="master-search" placeholder="Search name or handle…">
           <select id="master-filter-client"><option value="">All clients</option></select>
           <select id="master-filter-gender"><option value="">All genders</option></select>
+          <select id="master-filter-campaign"><option value="">All campaigns</option></select>
           ${multiselectHTML("master-filter-vertical", "verticals")}
         </div>
         ${rangeSliderHTML("master-follower")}
@@ -396,6 +401,7 @@ function renderMasterTab() {
         <th class="sort" data-col="age">Age <span class="sort-icon"></span></th>
         <th class="sort" data-col="gender">Gender <span class="sort-icon"></span></th>
         <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+        <th class="no-sort">Campaign</th>
         <th class="no-sort">Remove</th>
       `,
       bodyId: "master-tbody",
@@ -411,6 +417,16 @@ function renderMasterTab() {
   [...new Set(approvedCreators.map(c => c.gender).filter(Boolean))].sort().forEach(v => {
     genderSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
   });
+  const campaignSel = document.getElementById("master-filter-campaign");
+  function refreshCampaignOptions() {
+    const current = campaignSel.value;
+    campaignSel.innerHTML = `<option value="">All campaigns</option>`;
+    [...new Set(approvedCreators.map(c => campaigns[c.id]).filter(Boolean))].sort().forEach(v => {
+      campaignSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+    });
+    campaignSel.value = current;
+  }
+  refreshCampaignOptions();
   const verticalOptions = [...new Set(approvedCreators.map(c => c.vertical).filter(Boolean))].sort();
   const verticalFilter = initMultiselect("master-filter-vertical", verticalOptions, "verticals", () => render());
   const followerFilter = initRangeSlider("master-follower", () => render());
@@ -421,12 +437,14 @@ function renderMasterTab() {
     const q = document.getElementById("master-search").value.trim().toLowerCase();
     const clientFilter = document.getElementById("master-filter-client").value;
     const genderFilter = document.getElementById("master-filter-gender").value;
+    const campaignFilter = document.getElementById("master-filter-campaign").value;
     const verticalSelected = verticalFilter.getSelected();
     const fMin = followerFilter.getMin(), fMax = followerFilter.getMax();
 
     let rows = approvedCreators.filter(c => {
       if (clientFilter && c.client !== clientFilter) return false;
       if (genderFilter && c.gender !== genderFilter) return false;
+      if (campaignFilter && campaigns[c.id] !== campaignFilter) return false;
       if (verticalSelected.size && !verticalSelected.has(c.vertical)) return false;
       const followers = c.followers || 0;
       if (followers < fMin || followers > fMax) return false;
@@ -456,9 +474,10 @@ function renderMasterTab() {
         <td>${cellOr(c.age)}</td>
         <td>${cellOr(c.gender)}</td>
         <td>${escHtml(c.client)}</td>
+        <td><input type="text" class="campaign-input" data-id="${escHtml(c.id)}" value="${escHtml(campaigns[c.id] || "")}" placeholder="e.g. Fall Launch"></td>
         <td><button class="remove-btn" type="button">Remove</button></td>
       </tr>
-    `).join("") : `<tr><td colspan="10" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+    `).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
 
     document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
     const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
@@ -472,6 +491,14 @@ function renderMasterTab() {
         renderMasterTab();
       });
     });
+    document.querySelectorAll(".campaign-input").forEach(input => {
+      input.addEventListener("change", () => {
+        const val = input.value.trim();
+        if (val) campaigns[input.dataset.id] = val; else delete campaigns[input.dataset.id];
+        saveCampaigns(campaigns);
+        refreshCampaignOptions();
+      });
+    });
   }
 
   document.querySelectorAll(".src-table th.sort").forEach(th => {
@@ -482,7 +509,7 @@ function renderMasterTab() {
       render();
     });
   });
-  ["master-search", "master-filter-client", "master-filter-gender"].forEach(id => {
+  ["master-search", "master-filter-client", "master-filter-gender", "master-filter-campaign"].forEach(id => {
     document.getElementById(id).addEventListener("input", render);
   });
 

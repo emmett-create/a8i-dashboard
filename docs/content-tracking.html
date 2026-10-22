@@ -11,34 +11,266 @@
 <section class="hero" style="padding-bottom:40px">
 <div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
-    <div class="eyebrow">A8I Process &middot; 06</div>
+    <div class="eyebrow">A8I &middot; 06</div>
     <h1>Content Tracking</h1>
   </div>
 </section>
-<section class="section" style="padding-top:60px">
-  <div id="rows"></div>
-</section>
-<div id="footer"></div>
 
+<section class="section src-section" style="padding-top:60px">
+  <div class="src-label">Posted Content</div>
+  <p class="review-summary" id="ct-summary"></p>
+  <div id="content"></div>
+</section>
+
+<div class="overlay hidden" id="ct-edit-overlay">
+  <div class="modal-card">
+    <h3 id="ct-edit-title">Log a post</h3>
+    <div class="field">
+      <label>Creator</label>
+      <select id="ct-ef-creator"></select>
+    </div>
+    <div class="field-row field-row-3">
+      <div class="field"><label>Type</label>
+        <select id="ct-ef-type"></select>
+      </div>
+      <div class="field"><label>Date</label><input type="date" id="ct-ef-date"></div>
+      <div class="field"><label>EMV</label><input type="number" id="ct-ef-emv" placeholder="0"></div>
+    </div>
+    <div class="field-row field-row-3">
+      <div class="field"><label>Likes</label><input type="number" id="ct-ef-likes" placeholder="0"></div>
+      <div class="field"><label>Comments</label><input type="number" id="ct-ef-comments" placeholder="0"></div>
+      <div class="field"><label>Shares</label><input type="number" id="ct-ef-shares" placeholder="0"></div>
+    </div>
+    <div class="field"><label>Impressions</label><input type="number" id="ct-ef-impressions" placeholder="0"></div>
+    <div class="field"><label>Post link <span style="font-weight:400;color:var(--dim)">(optional)</span></label><input type="text" id="ct-ef-url" placeholder="https://instagram.com/p/..."></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="ct-edit-cancel">Cancel</button>
+      <button class="btn btn-solid" type="button" id="ct-edit-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="footer"></div>
 <script src="common.js"></script>
 <script>
-const ROWS = [
-  { num: 1, title: "Tracking Content", status: "later",
-    note: "Flagged lower priority for now — mostly a business/partnership question, not a build question yet.",
-    items: [
-      { text: "Our own Archive?", children: [
-        { text: "Powered by Archive", children: [
-          { text: "Our own Archive doesn't give them access to their own workspace" },
-        ]},
-        { text: "Referral + connecting to the system?" },
-        { text: "Basic internal version of Archive" },
-      ]},
-      { text: "Do we work with Archive?", question: true },
-    ]},
-];
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
-document.getElementById("rows").innerHTML = renderRowList(ROWS);
+
+function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return fallback; } }
+function saveJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+
+const known = loadJSON("a8i_known_creators", {});
+const decisions = loadJSON("a8i_creator_decisions", {});
+const campaigns = loadJSON("a8i_campaigns", {});
+let posts = loadJSON("a8i_content_posts", []);
+
+// Manual log for now — this is the real data Reporting's numbers are built
+// from, standing in until a real content-tracking integration ("powered by
+// Archive" or otherwise) replaces it with live post data.
+const POST_TYPES = ["IG Feed", "IG Reel", "IG Story", "TikTok", "TikTok Story"];
+
+const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
+const content = document.getElementById("content");
+
+function platLink(url, label) {
+  return url ? `<a class="plat-link" href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(label)}</a>` : `<span class="dim">—</span>`;
+}
+function cellOr(v) { return (v || v === 0) ? escHtml(v) : `<span class="dim">—</span>`; }
+function fmtDate(iso) { return iso ? new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"; }
+function fmtNum(n) { return (n || 0).toLocaleString(); }
+
+if (!approvedCreators.length) {
+  document.getElementById("ct-summary").textContent = "";
+  content.innerHTML = `
+    <div class="empty-state">
+      No approved creators to log posts for yet.<br>
+      <a href="sourcing.html">Approve some creators in Sourcing first &rarr;</a>
+    </div>
+  `;
+} else {
+  document.getElementById("ct-summary").textContent =
+    `Logged by hand for now — this feeds Reporting's numbers directly, standing in until a real content-tracking integration exists.`;
+
+  content.innerHTML = `
+    <div class="form-cta" style="justify-content:flex-start;padding:0 0 20px">
+      <button class="btn btn-solid" type="button" id="ct-add-btn">+ Log a Post</button>
+    </div>
+    <div class="src-toolbar">
+      <input type="search" id="ct-search" placeholder="Search creator or handle…">
+      <select id="ct-filter-client"><option value="">All clients</option></select>
+      <select id="ct-filter-campaign"><option value="">All campaigns</option></select>
+      <select id="ct-filter-type">
+        <option value="">All types</option>
+        ${POST_TYPES.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join("")}
+      </select>
+    </div>
+    <p class="src-shown-count" id="shown-count"></p>
+    <div class="src-table-wrap">
+      <table class="src-table content-table">
+        <thead>
+          <tr>
+            <th class="no-sort"></th>
+            <th class="sort" data-col="date">Date <span class="sort-icon"></span></th>
+            <th class="sort" data-col="creator">Creator <span class="sort-icon"></span></th>
+            <th class="no-sort">Client</th>
+            <th class="no-sort">Campaign</th>
+            <th class="no-sort">Type</th>
+            <th class="no-sort">Link</th>
+            <th class="sort" data-col="likes">Likes <span class="sort-icon"></span></th>
+            <th class="no-sort">Comments</th>
+            <th class="no-sort">Shares</th>
+            <th class="sort" data-col="impressions">Impressions <span class="sort-icon"></span></th>
+            <th class="sort" data-col="emv">EMV <span class="sort-icon"></span></th>
+            <th class="no-sort"></th>
+          </tr>
+        </thead>
+        <tbody id="ct-tbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  const clientSel = document.getElementById("ct-filter-client");
+  [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
+    clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+  const campaignSel = document.getElementById("ct-filter-campaign");
+  [...new Set(Object.values(campaigns).filter(Boolean))].sort().forEach(v => {
+    campaignSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+
+  let sortCol = "date", sortDir = "desc";
+
+  function render() {
+    const q = document.getElementById("ct-search").value.trim().toLowerCase();
+    const clientFilter = document.getElementById("ct-filter-client").value;
+    const campaignFilter = document.getElementById("ct-filter-campaign").value;
+    const typeFilter = document.getElementById("ct-filter-type").value;
+
+    let rows = posts.map(p => ({ ...p, creatorObj: known[p.creatorId] })).filter(p => p.creatorObj);
+    rows = rows.filter(p => {
+      if (clientFilter && p.creatorObj.client !== clientFilter) return false;
+      if (campaignFilter && campaigns[p.creatorId] !== campaignFilter) return false;
+      if (typeFilter && p.type !== typeFilter) return false;
+      if (q && !`${p.creatorObj.name} ${p.creatorObj.ig_handle || ""} ${p.creatorObj.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      let av = sortCol === "creator" ? a.creatorObj.name : a[sortCol];
+      let bv = sortCol === "creator" ? b.creatorObj.name : b[sortCol];
+      if (["likes", "impressions", "emv"].includes(sortCol) || sortCol === "date") { av = av || 0; bv = bv || 0; }
+      else { av = (av || "").toString().toLowerCase(); bv = (bv || "").toString().toLowerCase(); }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    document.getElementById("shown-count").textContent = `Showing ${rows.length.toLocaleString()} of ${posts.length.toLocaleString()} posts`;
+
+    document.getElementById("ct-tbody").innerHTML = rows.length ? rows.map(p => {
+      const c = p.creatorObj;
+      const url = p.type.startsWith("TikTok") ? c.tt_url : c.ig_url;
+      return `
+        <tr data-id="${escHtml(p.id)}">
+          <td><button class="btn-icon ct-edit-btn" type="button" title="Edit">&#9998;</button></td>
+          <td class="dim">${fmtDate(p.date)}</td>
+          <td class="name-cell">${escHtml(c.name)}</td>
+          <td>${escHtml(c.client)}</td>
+          <td>${cellOr(campaigns[p.creatorId])}</td>
+          <td>${escHtml(p.type)}</td>
+          <td>${platLink(p.url || url, "View")}</td>
+          <td class="num-cell">${fmtNum(p.likes)}</td>
+          <td class="num-cell">${fmtNum(p.comments)}</td>
+          <td class="num-cell">${fmtNum(p.shares)}</td>
+          <td class="num-cell">${fmtNum(p.impressions)}</td>
+          <td class="num-cell">$${fmtNum(p.emv)}</td>
+          <td><button class="btn-icon ct-del-btn" type="button" title="Delete">&times;</button></td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="13" class="dim" style="text-align:center;padding:30px">No posts match these filters.</td></tr>`;
+
+    document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
+    const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
+    if (activeTh) activeTh.textContent = sortDir === "asc" ? " ↑" : " ↓";
+
+    document.querySelectorAll(".ct-edit-btn").forEach(btn => {
+      btn.addEventListener("click", () => openEditModal(btn.closest("tr").dataset.id));
+    });
+    document.querySelectorAll(".ct-del-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.closest("tr").dataset.id;
+        if (!confirm("Delete this post entry?")) return;
+        posts = posts.filter(p => p.id !== id);
+        saveJSON("a8i_content_posts", posts);
+        render();
+      });
+    });
+  }
+
+  document.querySelectorAll(".src-table th.sort").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = "desc"; }
+      render();
+    });
+  });
+  ["ct-search", "ct-filter-client", "ct-filter-campaign", "ct-filter-type"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  // ── Add / edit modal ───────────────────────────────────────────────
+  const overlay = document.getElementById("ct-edit-overlay");
+  const creatorSel = document.getElementById("ct-ef-creator");
+  creatorSel.innerHTML = approvedCreators
+    .slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(c => `<option value="${escHtml(c.id)}">${escHtml(c.name)} (${escHtml(c.client)})</option>`).join("");
+  document.getElementById("ct-ef-type").innerHTML = POST_TYPES.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join("");
+
+  let editingId = null;
+  function openEditModal(id) {
+    editingId = id;
+    const p = id ? posts.find(x => x.id === id) : null;
+    document.getElementById("ct-edit-title").textContent = p ? "Edit post" : "Log a post";
+    creatorSel.value = p ? p.creatorId : (approvedCreators[0]?.id || "");
+    document.getElementById("ct-ef-type").value = p ? p.type : POST_TYPES[0];
+    document.getElementById("ct-ef-date").value = p ? p.date : new Date().toISOString().slice(0, 10);
+    document.getElementById("ct-ef-likes").value = p ? p.likes : "";
+    document.getElementById("ct-ef-comments").value = p ? p.comments : "";
+    document.getElementById("ct-ef-shares").value = p ? p.shares : "";
+    document.getElementById("ct-ef-impressions").value = p ? p.impressions : "";
+    document.getElementById("ct-ef-emv").value = p ? p.emv : "";
+    document.getElementById("ct-ef-url").value = p ? (p.url || "") : "";
+    overlay.classList.remove("hidden");
+  }
+  document.getElementById("ct-add-btn").addEventListener("click", () => openEditModal(null));
+  document.getElementById("ct-edit-cancel").addEventListener("click", () => overlay.classList.add("hidden"));
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.add("hidden"); });
+  document.getElementById("ct-edit-save").addEventListener("click", () => {
+    const entry = {
+      id: editingId || (Date.now() + "-" + Math.random().toString(36).slice(2)),
+      creatorId: creatorSel.value,
+      type: document.getElementById("ct-ef-type").value,
+      date: document.getElementById("ct-ef-date").value || new Date().toISOString().slice(0, 10),
+      likes: +document.getElementById("ct-ef-likes").value || 0,
+      comments: +document.getElementById("ct-ef-comments").value || 0,
+      shares: +document.getElementById("ct-ef-shares").value || 0,
+      impressions: +document.getElementById("ct-ef-impressions").value || 0,
+      emv: +document.getElementById("ct-ef-emv").value || 0,
+      url: document.getElementById("ct-ef-url").value.trim(),
+    };
+    if (editingId) {
+      posts = posts.map(p => p.id === editingId ? entry : p);
+    } else {
+      posts.push(entry);
+    }
+    saveJSON("a8i_content_posts", posts);
+    overlay.classList.add("hidden");
+    render();
+  });
+
+  render();
+}
 </script>
 </body>
 </html>

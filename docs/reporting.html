@@ -22,18 +22,25 @@
   <div id="content"></div>
 </section>
 
+<div id="chart-tooltip"></div>
 <div id="footer"></div>
 <script src="common.js"></script>
 <script>
 document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
 document.getElementById("footer").innerHTML = renderFooter();
 
-function loadJSON(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch { return {}; } }
+function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return fallback; } }
 
-const known = loadJSON("a8i_known_creators");
-const decisions = loadJSON("a8i_creator_decisions");
-const giftData = loadJSON("a8i_gift_applications");
-const tracking = loadJSON("a8i_tracking_status");
+const known = loadJSON("a8i_known_creators", {});
+const decisions = loadJSON("a8i_creator_decisions", {});
+const giftData = loadJSON("a8i_gift_applications", {});
+const tracking = loadJSON("a8i_tracking_status", {});
+const campaigns = loadJSON("a8i_campaigns", {});
+const orders = loadJSON("a8i_order_placements", {});
+const posts = loadJSON("a8i_content_posts", []);
+
+const POST_TYPES = ["IG Feed", "IG Reel", "IG Story", "TikTok", "TikTok Story"];
+const TYPE_COLORS = { "IG Reel": "#4F8FEA", "IG Feed": "#7C5CFC", "IG Story": "#34B27B", "TikTok": "#F5A524", "TikTok Story": "#E4572E" };
 
 const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
 const content = document.getElementById("content");
@@ -48,70 +55,307 @@ if (!approvedCreators.length) {
   `;
 } else {
   document.getElementById("rp-summary").textContent =
-    `Pulled live from every approved creator's actual Gifting, Order Placement, and Tracking status — nothing here is a separate, hand-entered number.`;
-
-  const ordersPlaced = approvedCreators.filter(c => giftData[c.id] && giftData[c.id].status !== "Not placed").length;
-  const delivered = approvedCreators.filter(c => giftData[c.id]?.status === "Delivered").length;
-  const outreachSent = approvedCreators.filter(c => tracking[c.id]?.outreach && tracking[c.id].outreach !== "Not started").length;
-  const contentLive = approvedCreators.filter(c => tracking[c.id]?.posting === "Live").length;
-
-  const kpis = [
-    { label: "Approved Creators", value: approvedCreators.length },
-    { label: "Gift Applications", value: approvedCreators.filter(c => giftData[c.id]).length },
-    { label: "Outreach Sent", value: outreachSent },
-    { label: "Orders Placed", value: ordersPlaced },
-    { label: "Delivered", value: delivered },
-    { label: "Content Live", value: contentLive },
-  ];
-
-  const clients = [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort();
-  const byClient = clients.map(client => {
-    const rows = approvedCreators.filter(c => c.client === client);
-    return {
-      client,
-      approved: rows.length,
-      ordersPlaced: rows.filter(c => giftData[c.id] && giftData[c.id].status !== "Not placed").length,
-      delivered: rows.filter(c => giftData[c.id]?.status === "Delivered").length,
-      live: rows.filter(c => tracking[c.id]?.posting === "Live").length,
-    };
-  });
+    `One client's own numbers — Outreach and Orders Placed are pulled live from real status today; everything post-related (UGC, EMV, engagement) reads from Content Tracking and will show 0 until that's actually logged for a creator.`;
 
   content.innerHTML = `
-    <div class="kpi-grid">
-      ${kpis.map(k => `
-        <div class="kpi-tile">
-          <div class="kpi-value">${k.value.toLocaleString()}</div>
-          <div class="kpi-label">${escHtml(k.label)}</div>
-        </div>
-      `).join("")}
+    <div class="report-toolbar">
+      <div class="report-fld">
+        <label>Campaign</label>
+        <select id="rp-campaign"><option value="">All Campaigns</option></select>
+      </div>
+      <div class="report-fld"><label>From</label><input type="date" id="rp-from"></div>
+      <div class="report-fld"><label>To</label><input type="date" id="rp-to"></div>
+      <button class="btn btn-solid" type="button" id="rp-refresh" style="padding:11px 22px">Refresh</button>
+      <button class="btn btn-outline" type="button" id="rp-clear" style="padding:11px 22px">Clear Dates</button>
     </div>
-
-    <div class="src-label" style="margin-top:10px">By Client</div>
-    <div class="src-table-wrap">
-      <table class="src-table client-report-table">
-        <thead>
-          <tr>
-            <th class="no-sort">Client</th>
-            <th class="no-sort">Approved</th>
-            <th class="no-sort">Orders Placed</th>
-            <th class="no-sort">Delivered</th>
-            <th class="no-sort">Content Live</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${byClient.map(r => `
-            <tr>
-              <td class="name-cell">${escHtml(r.client)}</td>
-              <td class="num-cell">${r.approved.toLocaleString()}</td>
-              <td class="num-cell">${r.ordersPlaced.toLocaleString()}</td>
-              <td class="num-cell">${r.delivered.toLocaleString()}</td>
-              <td class="num-cell">${r.live.toLocaleString()}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
+    <div id="rp-body"></div>
   `;
+
+  const campaignSel = document.getElementById("rp-campaign");
+  [...new Set(approvedCreators.map(c => campaigns[c.id]).filter(Boolean))].sort().forEach(v => {
+    campaignSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+  });
+
+  // ── Date helpers — posts store a "YYYY-MM-DD" string, tracking/orders
+  // store an epoch-ms timestamp (the moment a status was last changed,
+  // used here as a stand-in for "when that event happened" since nothing
+  // in a8i keeps a full status-change history yet). Both get normalized
+  // to a plain Date for range filtering and week bucketing.
+  function toDate(v) {
+    if (v == null) return null;
+    return typeof v === "number" ? new Date(v) : new Date(v + "T00:00:00");
+  }
+  function dateKey(d) { return d.toISOString().slice(0, 10); }
+  function fmtShortDate(d) { return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+  function fmtCompact(n) {
+    n = n || 0;
+    if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+    if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+    return Math.round(n).toLocaleString();
+  }
+
+  function weekBuckets(from, to) {
+    const buckets = [];
+    let cur = new Date(from);
+    while (cur <= to) {
+      const end = new Date(Math.min(cur.getTime() + 6 * 86400000, to.getTime()));
+      buckets.push({ start: new Date(cur), end });
+      cur = new Date(end.getTime() + 86400000);
+    }
+    return buckets;
+  }
+
+  // ── Hand-rolled SVG charts — same approach as the Magna reporting
+  // dashboard (no charting library, just generated SVG strings). ─────
+  function chartCard(title, chart) {
+    return `<div class="chart-card"><h3>${escHtml(title)}</h3>${chart.svg}<div class="chart-legend">${chart.legend}</div></div>`;
+  }
+  function lineChartSVG(weeks, series) {
+    const W = 520, H = 190, padL = 42, padR = 10, padT = 10, padB = 24;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const n = weeks.length;
+    const allVals = series.flatMap(s => weeks.map(s.value));
+    const maxY = Math.max(1, ...allVals);
+    const x = i => n <= 1 ? padL + innerW / 2 : padL + innerW * i / (n - 1);
+    const y = v => padT + innerH - (v / maxY) * innerH;
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(f => {
+      const yy = padT + innerH * (1 - f);
+      return `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${padL-6}" y="${yy+3}" font-size="9" fill="var(--dim)" text-anchor="end">${fmtCompact(maxY*f)}</text>`;
+    }).join("");
+    const xLabels = weeks.map((w,i) => n > 12 && i % 2 !== 0 ? "" : `<text x="${x(i)}" y="${H-6}" font-size="9" fill="var(--dim)" text-anchor="middle">${fmtShortDate(w.start)}</text>`).join("");
+    const lines = series.map(s => {
+      if (!n) return "";
+      const pts = weeks.map((w,i) => `${x(i)},${y(s.value(w))}`).join(" ");
+      const dots = weeks.map((w,i) => `<circle cx="${x(i)}" cy="${y(s.value(w))}" r="2.5" fill="${s.color}"/>`).join("");
+      return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+    }).join("");
+    const colW = n > 1 ? innerW / (n - 1) : innerW;
+    const hits = n ? weeks.map((w,i) => {
+      const tipLines = series.map(s => `${escHtml(s.label)}: ${escHtml(fmtCompact(s.value(w)))}`).join("<br>");
+      return `<rect class="chart-hit" x="${x(i)-colW/2}" y="${padT}" width="${colW}" height="${innerH}" fill="transparent" data-tip="${escHtml(fmtShortDate(w.start))}<br>${tipLines}"/>`;
+    }).join("") : "";
+    const svg = n ? `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${gridLines}${lines}${hits}${xLabels}</svg>`
+                  : `<p class="dim" style="padding:20px 0">No data for this range.</p>`;
+    const legend = series.map(s => `<span><span class="dot" style="background:${s.color}"></span>${escHtml(s.label)}</span>`).join("");
+    return { svg, legend };
+  }
+  function stackedBarSVG(weeks, series) {
+    const W = 520, H = 190, padL = 36, padR = 10, padT = 10, padB = 24;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const n = weeks.length;
+    const totals = weeks.map(w => series.reduce((s, ser) => s + (ser.value(w) || 0), 0));
+    const maxY = Math.max(1, ...totals);
+    const gap = n ? innerW / n : innerW;
+    const bw = gap * 0.6;
+    const y = v => padT + innerH - (v / maxY) * innerH;
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(f => {
+      const yy = padT + innerH * (1 - f);
+      return `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${padL-6}" y="${yy+3}" font-size="9" fill="var(--dim)" text-anchor="end">${fmtCompact(maxY*f)}</text>`;
+    }).join("");
+    const bars = weeks.map((w,i) => {
+      let cum = 0;
+      const xBar = padL + gap*i + (gap-bw)/2;
+      return series.map(s => {
+        const v = s.value(w) || 0;
+        const y0 = y(cum), y1 = y(cum+v);
+        cum += v;
+        const tip = `${escHtml(s.label)}: ${escHtml(fmtCompact(v))}`;
+        return v > 0 ? `<rect class="chart-hit" x="${xBar}" y="${y1}" width="${bw}" height="${Math.max(0,y0-y1)}" fill="${s.color}" data-tip="${tip}"/>` : "";
+      }).join("");
+    }).join("");
+    const xLabels = weeks.map((w,i) => n > 12 && i % 2 !== 0 ? "" : `<text x="${padL + gap*i + gap/2}" y="${H-6}" font-size="9" fill="var(--dim)" text-anchor="middle">${fmtShortDate(w.start)}</text>`).join("");
+    const svg = n ? `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${gridLines}${bars}${xLabels}</svg>`
+                  : `<p class="dim" style="padding:20px 0">No data for this range.</p>`;
+    const legend = series.map(s => `<span><span class="dot" style="background:${s.color}"></span>${escHtml(s.label)}</span>`).join("");
+    return { svg, legend };
+  }
+  function wireChartTooltips() {
+    const tip = document.getElementById("chart-tooltip");
+    document.querySelectorAll(".chart-hit").forEach(el => {
+      el.addEventListener("mouseenter", () => { tip.innerHTML = el.dataset.tip; tip.style.opacity = "1"; });
+      el.addEventListener("mousemove", (e) => { tip.style.left = (e.clientX + 14) + "px"; tip.style.top = (e.clientY + 14) + "px"; });
+      el.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
+    });
+  }
+
+  function render() {
+    const campaignFilter = campaignSel.value;
+    const fromVal = document.getElementById("rp-from").value;
+    const toVal = document.getElementById("rp-to").value;
+
+    const creatorsInScope = approvedCreators.filter(c => !campaignFilter || campaigns[c.id] === campaignFilter);
+    const scopeIds = new Set(creatorsInScope.map(c => c.id));
+
+    // Every dated thing we know about, in scope — used both to filter and
+    // (when no explicit range is picked) to figure out a sensible default
+    // range to show.
+    const datedPosts = posts.filter(p => scopeIds.has(p.creatorId)).map(p => ({ ...p, _d: toDate(p.date) }));
+    const datedOutreach = creatorsInScope.filter(c => tracking[c.id]?.outreach && tracking[c.id].outreach !== "Not started" && tracking[c.id].updatedAt)
+      .map(c => ({ creatorId: c.id, confirmed: tracking[c.id].outreach === "Confirmed", _d: toDate(tracking[c.id].updatedAt) }));
+    const datedOrders = Object.entries(orders).filter(([id, o]) => scopeIds.has(id) && o.orderStatus === "Ordered" && o.placedAt)
+      .map(([id, o]) => ({ creatorId: id, _d: toDate(o.placedAt) }));
+
+    const allDates = [...datedPosts, ...datedOutreach, ...datedOrders].map(x => x._d);
+    let from = fromVal ? toDate(fromVal) : (allDates.length ? new Date(Math.min(...allDates)) : new Date());
+    let to = toVal ? toDate(toVal) : (allDates.length ? new Date(Math.max(...allDates)) : new Date());
+    if (from > to) [from, to] = [to, from];
+
+    const inRange = d => d >= from && d <= to;
+    const postsInScope = datedPosts.filter(p => inRange(p._d));
+    const outreachInScope = datedOutreach.filter(o => inRange(o._d));
+    const ordersInScope = datedOrders.filter(o => inRange(o._d));
+
+    const postedUserIds = new Set(postsInScope.map(p => p.creatorId));
+    const totalFollowership = [...postedUserIds].reduce((s, id) => s + (known[id]?.followers || 0), 0);
+    const sumBy = key => postsInScope.reduce((s, p) => s + (+p[key] || 0), 0);
+    const countType = t => postsInScope.filter(p => p.type === t).length;
+
+    const kpis = [
+      { label: "Outreach Sent", value: outreachInScope.length },
+      { label: "Gifts Confirmed", value: outreachInScope.filter(o => o.confirmed).length },
+      { label: "Orders Placed", value: ordersInScope.length },
+      { label: "Posted Users", value: postedUserIds.size },
+      { label: "IG Feed", value: countType("IG Feed") },
+      { label: "IG Reel", value: countType("IG Reel") },
+      { label: "IG Story", value: countType("IG Story") },
+      { label: "TikTok", value: countType("TikTok") },
+      { label: "TikTok Story", value: countType("TikTok Story") },
+      { label: "Total UGC", value: postsInScope.length },
+      { label: "Total Followership", value: totalFollowership },
+      { label: "Likes", value: sumBy("likes") },
+      { label: "Comments", value: sumBy("comments") },
+      { label: "Shares", value: sumBy("shares") },
+      { label: "Impressions", value: sumBy("impressions") },
+      { label: "EMV", value: sumBy("emv"), prefix: "$" },
+    ];
+
+    const topPosts = postsInScope
+      .map(p => ({ ...p, engagement: (+p.likes||0) + (+p.comments||0) + (+p.shares||0) }))
+      .sort((a, b) => b.engagement - a.engagement)
+      .slice(0, 10);
+
+    const weeks = weekBuckets(from, to).map(wk => {
+      const wPosts = postsInScope.filter(p => p._d >= wk.start && p._d <= wk.end);
+      const wOutreach = outreachInScope.filter(o => o._d >= wk.start && o._d <= wk.end);
+      const wOrders = ordersInScope.filter(o => o._d >= wk.start && o._d <= wk.end);
+      const wPosters = new Set(wPosts.map(p => p.creatorId));
+      return {
+        start: wk.start, end: wk.end,
+        outreach: wOutreach.length,
+        gifts_confirmed: wOutreach.filter(o => o.confirmed).length,
+        orders_placed: wOrders.length,
+        posts_by_type: Object.fromEntries(POST_TYPES.map(t => [t, wPosts.filter(p => p.type === t).length])),
+        posted_users: wPosters.size,
+        total_followership: [...wPosters].reduce((s, id) => s + (known[id]?.followers || 0), 0),
+        likes: wPosts.reduce((s,p) => s + (+p.likes||0), 0),
+        comments: wPosts.reduce((s,p) => s + (+p.comments||0), 0),
+        shares: wPosts.reduce((s,p) => s + (+p.shares||0), 0),
+        impressions: wPosts.reduce((s,p) => s + (+p.impressions||0), 0),
+        emv: wPosts.reduce((s,p) => s + (+p.emv||0), 0),
+      };
+    });
+
+    const contentCountChart = stackedBarSVG(weeks, POST_TYPES.map(t => ({ label: t, color: TYPE_COLORS[t], value: w => w.posts_by_type[t] })));
+    const engagementChart = lineChartSVG(weeks, [
+      { label: "Total", color: "#CA0100", value: w => w.likes + w.comments + w.shares },
+      { label: "Likes", color: "#4F8FEA", value: w => w.likes },
+      { label: "Comments", color: "#7C5CFC", value: w => w.comments },
+      { label: "Shares", color: "#34B27B", value: w => w.shares },
+    ]);
+    const impressionsChart = lineChartSVG(weeks, [{ label: "Impressions", color: "#4F8FEA", value: w => w.impressions }]);
+    const followershipChart = lineChartSVG(weeks, [{ label: "Followers", color: "#4F8FEA", value: w => w.total_followership }]);
+
+    const totalsRow = {
+      outreach: weeks.reduce((s,w)=>s+w.outreach,0),
+      gifts_confirmed: weeks.reduce((s,w)=>s+w.gifts_confirmed,0),
+      orders_placed: weeks.reduce((s,w)=>s+w.orders_placed,0),
+      posts_by_type: Object.fromEntries(POST_TYPES.map(t => [t, weeks.reduce((s,w)=>s+w.posts_by_type[t],0)])),
+      posted_users: postedUserIds.size,
+      total_followership: totalFollowership,
+      likes: sumBy("likes"), comments: sumBy("comments"), shares: sumBy("shares"), impressions: sumBy("impressions"), emv: sumBy("emv"),
+    };
+
+    document.getElementById("rp-body").innerHTML = `
+      <div class="kpi-grid">
+        ${kpis.map(k => `
+          <div class="kpi-tile">
+            <div class="kpi-value">${k.prefix || ""}${k.value.toLocaleString()}</div>
+            <div class="kpi-label">${escHtml(k.label)}</div>
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="top-posts-card">
+        <h3>Top 10 Most Engaged Posts</h3>
+        ${topPosts.length ? topPosts.map((p, i) => {
+          const c = known[p.creatorId] || {};
+          const handle = p.type.startsWith("TikTok") ? c.tt_handle : c.ig_handle;
+          return `
+            <div class="top-post-row">
+              <span class="rank">#${i+1}</span>
+              <span class="name-cell">@${escHtml(handle || c.name || "unknown")}</span>
+              <span class="dim">${escHtml(p.type)} &middot; ${escHtml(p.date)}</span>
+              <span>${(+p.likes||0).toLocaleString()} likes &middot; ${(+p.comments||0).toLocaleString()} comments &middot; ${(+p.shares||0).toLocaleString()} shares</span>
+            </div>
+          `;
+        }).join("") : `<p class="dim">No posts logged in Content Tracking yet for this range.</p>`}
+      </div>
+
+      <div class="src-table-wrap" style="margin-bottom:40px">
+        <table class="weekly-table">
+          <thead>
+            <tr>
+              <th>Start</th><th>End</th><th>Outreach</th><th>Gifts Confirmed</th><th>Orders</th>
+              <th>IG Feed</th><th>IG Reel</th><th>IG Story</th><th>TikTok</th><th>TT Story</th>
+              <th>Posted Users</th><th>Followership</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Impressions</th><th>EMV</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${weeks.map(w => `
+              <tr>
+                <td>${fmtShortDate(w.start)}</td><td>${fmtShortDate(w.end)}</td>
+                <td>${w.outreach}</td><td>${w.gifts_confirmed}</td><td>${w.orders_placed}</td>
+                <td>${w.posts_by_type["IG Feed"]}</td><td>${w.posts_by_type["IG Reel"]}</td><td>${w.posts_by_type["IG Story"]}</td>
+                <td>${w.posts_by_type["TikTok"]}</td><td>${w.posts_by_type["TikTok Story"]}</td>
+                <td>${w.posted_users}</td><td>${fmtCompact(w.total_followership)}</td>
+                <td>${fmtCompact(w.likes)}</td><td>${fmtCompact(w.comments)}</td><td>${fmtCompact(w.shares)}</td>
+                <td>${fmtCompact(w.impressions)}</td><td>$${fmtCompact(w.emv)}</td>
+              </tr>
+            `).join("")}
+            <tr class="weekly-total">
+              <td colspan="2">Total</td>
+              <td>${totalsRow.outreach}</td><td>${totalsRow.gifts_confirmed}</td><td>${totalsRow.orders_placed}</td>
+              <td>${totalsRow.posts_by_type["IG Feed"]}</td><td>${totalsRow.posts_by_type["IG Reel"]}</td><td>${totalsRow.posts_by_type["IG Story"]}</td>
+              <td>${totalsRow.posts_by_type["TikTok"]}</td><td>${totalsRow.posts_by_type["TikTok Story"]}</td>
+              <td>${totalsRow.posted_users}</td><td>${fmtCompact(totalsRow.total_followership)}</td>
+              <td>${fmtCompact(totalsRow.likes)}</td><td>${fmtCompact(totalsRow.comments)}</td><td>${fmtCompact(totalsRow.shares)}</td>
+              <td>${fmtCompact(totalsRow.impressions)}</td><td>$${fmtCompact(totalsRow.emv)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="charts-row">
+        ${chartCard("Content Count", contentCountChart)}
+        ${chartCard("Engagement", engagementChart)}
+      </div>
+      <div class="charts-row">
+        ${chartCard("Impressions", impressionsChart)}
+        ${chartCard("Total Followership", followershipChart)}
+      </div>
+    `;
+    wireChartTooltips();
+  }
+
+  document.getElementById("rp-refresh").addEventListener("click", render);
+  document.getElementById("rp-clear").addEventListener("click", () => {
+    document.getElementById("rp-from").value = "";
+    document.getElementById("rp-to").value = "";
+    render();
+  });
+  campaignSel.addEventListener("change", render);
+
+  render();
 }
 </script>
 </body>
