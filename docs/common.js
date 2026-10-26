@@ -68,8 +68,8 @@ function renderHeader({ onDark = true, back = null } = {}) {
 const AREA_PAGES = [
   { id: "onboarding",       title: "Onboarding",       href: "onboarding.html" },
   { id: "sourcing",         title: "Sourcing",         href: "sourcing.html" },
-  { id: "gifting",          title: "Gifting",          href: "gifting.html" },
   { id: "outreach",         title: "Outreach",         href: "outreach.html" },
+  { id: "gifting",          title: "Gifting",          href: "gifting.html" },
   { id: "order-placement",  title: "Order Placement",  href: "order-placement.html" },
   { id: "content-tracking", title: "Content Tracking", href: "content-tracking.html" },
   { id: "reporting",        title: "Reporting",        href: "reporting.html" },

@@ -11,7 +11,7 @@
 <section class="hero" style="padding-bottom:40px">
 <div id="header"></div>
   <div class="hero-inner" style="padding-top:50px">
-    <div class="eyebrow">A8I &middot; 04</div>
+    <div class="eyebrow">A8I &middot; 03</div>
     <h1>Outreach</h1>
   </div>
 </section>
@@ -105,6 +105,7 @@ function platLink(url, label) {
 }
 function igCell(c) { return c.ig_handle ? platLink(c.ig_url, "@" + c.ig_handle) : `<span class="dim">—</span>`; }
 function ttCell(c) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_handle) : `<span class="dim">—</span>`; }
+function fmtFollowers(n) { return n == null ? "—" : n.toLocaleString(); }
 function statusOptions(stages, current) {
   return stages.map(s => `<option value="${escHtml(s)}"${s === current ? " selected" : ""}>${escHtml(s)}</option>`).join("");
 }
@@ -164,7 +165,8 @@ function renderTrackingTab() {
             <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
             <th class="no-sort">Instagram</th>
             <th class="no-sort">TikTok</th>
-            <th class="sort" data-col="client">Client <span class="sort-icon"></span></th>
+            <th class="no-sort">IG Followers</th>
+            <th class="no-sort">TT Followers</th>
             <th class="no-sort">Outreach</th>
             <th class="no-sort">Gifting</th>
             <th class="no-sort">Posting</th>
@@ -213,7 +215,8 @@ function renderTrackingTab() {
           <td class="name-cell">${escHtml(c.name)}</td>
           <td>${igCell(c)}</td>
           <td>${ttCell(c)}</td>
-          <td>${escHtml(c.client)}</td>
+          <td>${fmtFollowers(c.ig_followers)}</td>
+          <td>${fmtFollowers(c.tt_followers)}</td>
           <td>
             <div class="outreach-step-cell">
               <select class="status-select ${stageColorClass(OUTREACH_STEP_LABELS, t.outreach, ["Declined"])}" data-field="outreach">${statusOptions(OUTREACH_STEP_LABELS, t.outreach)}</select>
@@ -225,7 +228,7 @@ function renderTrackingTab() {
           <td class="updated-cell">${fmtUpdated(t.updatedAt)}</td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="8" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+    }).join("") : `<tr><td colspan="9" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
 
     document.querySelectorAll(".track-copy-btn").forEach(btn => {
       btn.addEventListener("click", () => {
