@@ -22,8 +22,15 @@
     <div class="form-block">
       <div class="form-block-label">Program Basics</div>
       <div class="field">
-        <label for="f-goals">What are your goals &amp; KPIs for this program?</label>
-        <textarea id="f-goals" placeholder="e.g. drive awareness and UGC volume ahead of our spring launch, target 2M+ impressions"></textarea>
+        <label>What are your goals &amp; KPIs for this program?</label>
+        <div class="checkbox-group" id="f-goals">
+          <label><input type="checkbox" value="Brand awareness"> Brand awareness</label>
+          <label><input type="checkbox" value="EMV"> EMV</label>
+          <label><input type="checkbox" value="Impressions"> Impressions</label>
+          <label><input type="checkbox" value="Quality of content"> Quality of content</label>
+          <label><input type="checkbox" value="Amount of content"> Amount of content</label>
+        </div>
+        <div class="hint">Placeholder list — confirm the real set with Ori before this ships.</div>
       </div>
       <div class="field">
         <label for="f-monthly">Monthly gifting goal</label>
