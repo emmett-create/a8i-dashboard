@@ -135,6 +135,170 @@ function renderActiveTab() {
   else renderCopyTab();
 }
 
+// ── Initial Outreach / Follow-up #1 batch sending — ported from Caroline's
+// Merit seeding system (the real backend A8I is modeled on), minus anything
+// that needs Mailmeteor's own API/webhooks (it has none — no auto-scheduled
+// follow-up tied to its send behavior, no click/reply/bounce tracking).
+// Eligibility rules, the CSV format, first-name cleaning, and undo are the
+// same idea, adapted to A8I's single flat creator list rather than Merit's
+// cross-campaign checks.
+const FOLLOWUP_DELAY_DAYS = 3; // matches Merit's own default "Follow-up days"
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// "kenny_reilly" -> "Kenny", "DR. O'BRIEN (she/her)" -> "O'Brien", emoji/@
+// stripped, ALL CAPS/lowercase -> Title Case, mixed case like McDonald kept.
+function cleanFirstName(fullName) {
+  if (!fullName) return "";
+  let name = String(fullName).trim().split(/\s+/)[0] || "";
+  name = name.replace(/\(.*?\)/g, "");
+  name = name.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, "");
+  name = name.replace(/^(dr|mr|mrs|ms|miss|prof)\.?$/i, "");
+  name = name.replace(/@/g, "");
+  name = (name.split(/[_.\d]+/)[0] || name).trim();
+  if (!name) return "";
+  const looksMixedCase = /[a-z][A-Z]/.test(name);
+  if (!looksMixedCase) {
+    name = name.toLowerCase().replace(/(^|['-])([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase());
+  }
+  return name;
+}
+
+// Adapted from Merit's rules (has an email, not do-not-contact, not emailed
+// elsewhere recently, not already gifted) — the "emailed elsewhere recently"
+// cooldown collapses to just "outreach stage unset" here, since A8I tracks
+// one flat creator list rather than multiple campaigns a creator could be
+// in at once.
+function isEligibleInitial(t) {
+  if (!t.email) return false;
+  if (t.doNotContact) return false;
+  if (t.outreach && t.outreach !== "Not started") return false;
+  if (t.gifting && t.gifting !== "Not started") return false;
+  return true;
+}
+function isEligibleFollowup(t) {
+  if (!t.email) return false;
+  if (t.doNotContact) return false;
+  if (t.outreach !== "Initial Email Sent") return false;
+  if (!t.outreachSentAt) return false;
+  if (Date.now() - t.outreachSentAt < FOLLOWUP_DELAY_DAYS * DAY_MS) return false;
+  return true;
+}
+
+let lastBatch = null; // { kind, ids, prev: {id: {...tracking snapshot before the batch}} }
+
+function downloadCsv(filename, rows) {
+  const csvCell = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const csv = rows.map(r => r.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function openOutreachBatchModal(kind, approvedCreators) {
+  const isInitial = kind === "initial";
+  const title = isInitial ? "Initial Outreach" : "Follow-up #1";
+  const verticalOptions = [...new Set(approvedCreators.map(c => c.vertical).filter(Boolean))].sort();
+  const genderOptions = [...new Set(approvedCreators.map(c => c.gender).filter(Boolean))].sort();
+
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:640px">
+      <h3>${escHtml(title)}</h3>
+      <p>Eligibility: has an email, not Do Not Contact, not already gifted${isInitial ? "" : `, sent the initial email at least ${FOLLOWUP_DELAY_DAYS} days ago`}.</p>
+      <div class="field">
+        <div class="field-row field-row-3" style="margin-bottom:0">
+          <select id="batch-filter-vertical"><option value="">All verticals</option>${verticalOptions.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join("")}</select>
+          <select id="batch-filter-gender"><option value="">All genders</option>${genderOptions.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join("")}</select>
+          <input type="text" id="batch-filter-location" placeholder="Location contains…">
+        </div>
+      </div>
+      <p id="batch-eligible-count" style="font-weight:600;margin-bottom:10px"></p>
+      <div class="field" style="margin-bottom:16px">
+        <label>How many do you want to send?</label>
+        <input type="number" id="batch-send-count" min="0" value="0">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" type="button" id="batch-cancel">Cancel</button>
+        <button class="btn btn-solid" type="button" id="batch-confirm">Mark Sent &amp; Download CSV</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  let eligible = [];
+  function recompute() {
+    const vertical = document.getElementById("batch-filter-vertical").value;
+    const gender = document.getElementById("batch-filter-gender").value;
+    const loc = document.getElementById("batch-filter-location").value.trim().toLowerCase();
+    eligible = approvedCreators.filter(c => {
+      const t = tracking[c.id] || {};
+      if (!(isInitial ? isEligibleInitial(t) : isEligibleFollowup(t))) return false;
+      if (vertical && c.vertical !== vertical) return false;
+      if (gender && c.gender !== gender) return false;
+      if (loc && !(c.location || "").toLowerCase().includes(loc)) return false;
+      return true;
+    });
+    document.getElementById("batch-eligible-count").textContent = `${eligible.length.toLocaleString()} eligible`;
+    const countInput = document.getElementById("batch-send-count");
+    countInput.max = eligible.length;
+    if (countInput.dataset.touched !== "1" || +countInput.value > eligible.length) countInput.value = eligible.length;
+  }
+  ["batch-filter-vertical", "batch-filter-gender", "batch-filter-location"].forEach(id => {
+    document.getElementById(id).addEventListener("input", recompute);
+  });
+  document.getElementById("batch-send-count").addEventListener("input", e => { e.target.dataset.touched = "1"; });
+  recompute();
+
+  function close() { overlay.remove(); }
+  document.getElementById("batch-cancel").addEventListener("click", close);
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+
+  document.getElementById("batch-confirm").addEventListener("click", () => {
+    const n = Math.max(0, Math.min(+document.getElementById("batch-send-count").value || 0, eligible.length));
+    if (n === 0) { close(); return; }
+    const batch = eligible.slice(0, n);
+    const prev = {};
+    const newStage = isInitial ? "Initial Email Sent" : "Email Follow-up #1";
+    const tsField = isInitial ? "outreachSentAt" : "followupSentAt";
+    batch.forEach(c => {
+      prev[c.id] = { ...(tracking[c.id] || {}) };
+      tracking[c.id] = { ...(tracking[c.id] || {}), outreach: newStage, [tsField]: Date.now(), updatedAt: Date.now() };
+    });
+    saveTracking(tracking);
+    lastBatch = { kind, ids: batch.map(c => c.id), prev };
+
+    downloadCsv(`a8i-${kind}-outreach-${new Date().toISOString().slice(0, 10)}.csv`,
+      [["First Name", "Email", "Handle"], ...batch.map(c => [
+        cleanFirstName(c.name), (tracking[c.id] || {}).email || "", c.ig_handle || c.tt_handle || "",
+      ])]);
+
+    close();
+    showUndoBanner(`${batch.length} creator${batch.length === 1 ? "" : "s"} marked "${newStage}".`);
+    renderTrackingTab();
+  });
+}
+
+function showUndoBanner(message) {
+  document.querySelectorAll(".outreach-undo-banner").forEach(b => b.remove());
+  const banner = document.createElement("div");
+  banner.className = "outreach-undo-banner";
+  banner.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--black);color:var(--white);padding:12px 20px;display:flex;align-items:center;gap:16px;z-index:300;font-size:13px";
+  banner.innerHTML = `<span>${escHtml(message)}</span><button type="button" id="outreach-undo-btn" style="color:var(--white);text-decoration:underline;background:none;border:none;cursor:pointer;font:inherit">Undo</button>`;
+  document.body.appendChild(banner);
+  document.getElementById("outreach-undo-btn").addEventListener("click", () => {
+    if (!lastBatch) return;
+    lastBatch.ids.forEach(id => { tracking[id] = lastBatch.prev[id]; });
+    saveTracking(tracking);
+    lastBatch = null;
+    banner.remove();
+    renderTrackingTab();
+  });
+  setTimeout(() => banner.remove(), 15000);
+}
+
 // ── Tab 1: Tracking (moved here from Sourcing — this is where progress on
 // an approved creator actually lives once sourcing is done) ──────────────
 function renderTrackingTab() {
@@ -156,6 +320,8 @@ function renderTrackingTab() {
     <div class="src-toolbar">
       <input type="search" id="track-search" placeholder="Search name or handle…">
       <select id="track-filter-client"><option value="">All clients</option></select>
+      <button class="btn btn-outline" type="button" id="btn-initial-outreach" style="padding:8px 16px;font-size:11px;margin-left:auto">Initial Outreach</button>
+      <button class="btn btn-outline" type="button" id="btn-followup-outreach" style="padding:8px 16px;font-size:11px">Follow-up &#35;1</button>
     </div>
     <p class="src-shown-count" id="shown-count"></p>
     <div class="src-table-wrap">
@@ -167,9 +333,11 @@ function renderTrackingTab() {
             <th class="no-sort">TikTok</th>
             <th class="no-sort">IG Followers</th>
             <th class="no-sort">TT Followers</th>
+            <th class="no-sort">Email</th>
             <th class="no-sort">Outreach</th>
             <th class="no-sort">Gifting</th>
             <th class="no-sort">Posting</th>
+            <th class="no-sort" style="text-align:center">DNC</th>
             <th class="no-sort">Updated</th>
           </tr>
         </thead>
@@ -182,6 +350,9 @@ function renderTrackingTab() {
   [...new Set(approvedCreators.map(c => c.client).filter(Boolean))].sort().forEach(v => {
     clientSel.insertAdjacentHTML("beforeend", `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
   });
+
+  document.getElementById("btn-initial-outreach").addEventListener("click", () => openOutreachBatchModal("initial", approvedCreators));
+  document.getElementById("btn-followup-outreach").addEventListener("click", () => openOutreachBatchModal("followup", approvedCreators));
 
   let sortCol = "name", sortDir = "asc";
 
@@ -217,6 +388,7 @@ function renderTrackingTab() {
           <td>${ttCell(c)}</td>
           <td>${fmtFollowers(c.ig_followers)}</td>
           <td>${fmtFollowers(c.tt_followers)}</td>
+          <td><input type="email" class="email-input" data-id="${escHtml(c.id)}" value="${escHtml(t.email || "")}" placeholder="creator@email.com" style="width:170px"></td>
           <td>
             <div class="outreach-step-cell">
               <select class="status-select ${stageColorClass(OUTREACH_STEP_LABELS, t.outreach, ["Declined"])}" data-field="outreach">${statusOptions(OUTREACH_STEP_LABELS, t.outreach)}</select>
@@ -225,10 +397,11 @@ function renderTrackingTab() {
           </td>
           <td><select class="status-select ${stageColorClass(GIFTING_STAGES, t.gifting)}" data-field="gifting">${statusOptions(GIFTING_STAGES, t.gifting)}</select></td>
           <td><select class="status-select ${stageColorClass(POSTING_STAGES, t.posting)}" data-field="posting">${statusOptions(POSTING_STAGES, t.posting)}</select></td>
+          <td style="text-align:center"><input type="checkbox" class="dnc-chk" data-id="${escHtml(c.id)}" ${t.doNotContact ? "checked" : ""} title="Do Not Contact — excluded from Initial Outreach and Follow-up batches"></td>
           <td class="updated-cell">${fmtUpdated(t.updatedAt)}</td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="9" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
+    }).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No creators match these filters.</td></tr>`;
 
     document.querySelectorAll(".track-copy-btn").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -257,6 +430,24 @@ function renderTrackingTab() {
         sel.className = `status-select ${stageColorClass(stages, sel.value, negatives)}`;
         if (field === "outreach") render();
         row.querySelector(".updated-cell").innerHTML = fmtUpdated(tracking[id].updatedAt);
+      });
+    });
+
+    document.querySelectorAll(".email-input").forEach(inp => {
+      inp.addEventListener("change", () => {
+        const id = inp.dataset.id;
+        tracking[id] = { ...(tracking[id] || {}), email: inp.value.trim() || null, updatedAt: Date.now() };
+        saveTracking(tracking);
+        inp.closest("tr").querySelector(".updated-cell").innerHTML = fmtUpdated(tracking[id].updatedAt);
+      });
+    });
+
+    document.querySelectorAll(".dnc-chk").forEach(chk => {
+      chk.addEventListener("change", () => {
+        const id = chk.dataset.id;
+        tracking[id] = { ...(tracking[id] || {}), doNotContact: chk.checked, updatedAt: Date.now() };
+        saveTracking(tracking);
+        chk.closest("tr").querySelector(".updated-cell").innerHTML = fmtUpdated(tracking[id].updatedAt);
       });
     });
   }
