@@ -20,6 +20,7 @@
   <div class="src-tabs" id="src-tabs">
     <button class="src-tab active" data-tab="tracking" type="button">Tracking</button>
     <button class="src-tab" data-tab="copy" type="button">Outreach Copy</button>
+    <button class="src-tab" data-tab="inbox" type="button">Inbox <span class="mock-flag">Mockup</span></button>
   </div>
   <div id="content"></div>
 </section>
@@ -132,6 +133,7 @@ tabs.forEach(btn => {
 
 function renderActiveTab() {
   if (activeTab === "tracking") renderTrackingTab();
+  else if (activeTab === "inbox") renderInboxTab();
   else renderCopyTab();
 }
 
@@ -465,6 +467,239 @@ function renderTrackingTab() {
   });
 
   render();
+}
+
+// ── Tab 3: Inbox (MOCKUP) — a visual/interactive prototype of what an
+// automated email inbox inside a8i could look like, grouped by what each
+// creator actually needs next, rather than one flat status column. This is
+// sample data only: no real Gmail/Resend/reply-to-address connection exists
+// yet, sending here just appends to a fake thread stored in localStorage,
+// the same way the rest of this site simulates things (Place Order,
+// Mark Sent & Download CSV) before the real backend exists. Built to let
+// the real layout and interaction get tested/felt before committing to the
+// actual email plumbing underneath it.
+const INBOX_KEY = "a8i_inbox_mock";
+const INBOX_SECTIONS = [
+  { key: "needs_outreach", label: "Needs Outreach", hint: "Not contacted yet" },
+  { key: "awaiting_reply", label: "Awaiting Reply", hint: "Sent, follow-up window hasn't hit yet" },
+  { key: "needs_followup", label: "Needs Follow-up", hint: "Sent, no reply after the follow-up window" },
+  { key: "needs_human", label: "Needs Human View", hint: "Replied, but the AI classifier isn't confident enough to auto-send" },
+  { key: "handled", label: "Handled", hint: "AI auto-sorted and replied, or a person already answered" },
+];
+
+function seedInboxMock() {
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  return [
+    {
+      id: "mock-1", name: "Priya Chandra", handle: "@priyawellness", section: "needs_outreach",
+      messages: [],
+    },
+    {
+      id: "mock-2", name: "Jonah Reyes", handle: "@jonahreyesfit", section: "needs_outreach",
+      messages: [],
+    },
+    {
+      id: "mock-3", name: "Sasha Lin", handle: "@sashalinstyle", section: "awaiting_reply",
+      messages: [
+        { from: "agency", text: "Hi Sasha, we've been loving your content and would love to gift you our new skincare set to try and share your take with your audience. Here's a quick form if you're interested: [form link]", at: now - 1 * DAY },
+      ],
+    },
+    {
+      id: "mock-4", name: "Devon Clarke", handle: "@devonclarkeco", section: "awaiting_reply",
+      messages: [
+        { from: "agency", text: "Hi Devon, we'd love to send you our new product to try, no strings attached, just excited for you to check it out. Let me know if you're interested: [form link]", at: now - 2 * DAY },
+      ],
+    },
+    {
+      id: "mock-5", name: "Maribel Osei", handle: "@maribelosei", section: "needs_followup",
+      messages: [
+        { from: "agency", text: "Hi Maribel, we'd love to gift you our new launch to try and share your take with your audience. Form here if you're interested: [form link]", at: now - 6 * DAY },
+      ],
+    },
+    {
+      id: "mock-6", name: "Theo Park", handle: "@theoparkedits", section: "needs_followup",
+      messages: [
+        { from: "agency", text: "Hi Theo, loved your last few posts, would love to send you our new product to try. Form here: [form link]", at: now - 5 * DAY },
+      ],
+    },
+    {
+      id: "mock-7", name: "Renn Castillo", handle: "@renncastillo", section: "needs_human",
+      messages: [
+        { from: "agency", text: "Hi Renn, we'd love to gift you our new set, form here if you're interested: [form link]", at: now - 4 * DAY },
+        { from: "creator", text: "Yes! I'd love this, but is there any way to also do a paid post alongside it? I usually charge for dedicated content like this.", at: now - 3 * DAY },
+      ],
+    },
+    {
+      id: "mock-8", name: "Imogen Vance", handle: "@imogenvance", section: "needs_human",
+      messages: [
+        { from: "agency", text: "Hi Imogen, we'd love to send you our new product, form here: [form link]", at: now - 3 * DAY },
+        { from: "creator", text: "Not for me right now, but maybe check back in a couple months? Things are pretty packed this quarter.", at: now - 2 * DAY },
+      ],
+    },
+    {
+      id: "mock-9", name: "Caleb Nwosu", handle: "@calebnwosu", section: "handled",
+      messages: [
+        { from: "agency", text: "Hi Caleb, we'd love to gift you our new product, form here: [form link]", at: now - 9 * DAY },
+        { from: "creator", text: "Yes I'm interested, sounds great!", at: now - 8 * DAY },
+        { from: "agency", text: "Amazing! Please fill out the form below with your shipping info and we'll get this right out to you: [form link]", at: now - 8 * DAY + 3600000, auto: true },
+      ],
+    },
+    {
+      id: "mock-10", name: "Winnie Sato", handle: "@winniesato", section: "handled",
+      messages: [
+        { from: "agency", text: "Hi Winnie, we'd love to send you our new launch, form here: [form link]", at: now - 10 * DAY },
+        { from: "creator", text: "Thanks so much for thinking of me, but I'm going to pass this time!", at: now - 9 * DAY },
+        { from: "agency", text: "No worries at all, thanks for letting us know! We'd love to stay in touch for future opportunities if that's ever of interest.", at: now - 9 * DAY + 1800000, auto: true },
+      ],
+    },
+  ];
+}
+
+function loadInboxMock() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(INBOX_KEY) || "null");
+    if (saved) return saved;
+  } catch {}
+  const seeded = seedInboxMock();
+  localStorage.setItem(INBOX_KEY, JSON.stringify(seeded));
+  return seeded;
+}
+function saveInboxMock(rows) { localStorage.setItem(INBOX_KEY, JSON.stringify(rows)); }
+
+function fmtInboxTime(ts) {
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " · " +
+    new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+let inboxRows = null;
+let inboxOpenId = null;
+
+function renderInboxTab() {
+  if (!inboxRows) inboxRows = loadInboxMock();
+
+  content.innerHTML = `
+    <div class="src-label">Inbox</div>
+    <p class="review-summary">Every creator conversation, organized by what needs to happen next — not a real inbox yet, this is sample data so the layout and interaction can be tried before the real Gmail/Resend/reply-to-address connection is built.</p>
+    <div class="inbox-mock-note">
+      <strong>Mockup, not live:</strong> sending here just appends to a fake thread saved in this browser. Nothing is actually emailed. Reset the sample data any time.
+      <button class="btn-icon" type="button" id="inbox-reset" title="Reset sample data">&#8635;</button>
+    </div>
+    <div id="inbox-sections"></div>
+  `;
+
+  document.getElementById("inbox-reset").addEventListener("click", () => {
+    inboxRows = seedInboxMock();
+    saveInboxMock(inboxRows);
+    inboxOpenId = null;
+    renderInboxSections();
+  });
+
+  renderInboxSections();
+}
+
+function renderInboxSections() {
+  const wrap = document.getElementById("inbox-sections");
+  wrap.innerHTML = INBOX_SECTIONS.map(sec => {
+    const rows = inboxRows.filter(r => r.section === sec.key);
+    return `
+      <div class="inbox-section">
+        <div class="inbox-section-head">
+          <span class="inbox-section-label">${escHtml(sec.label)}</span>
+          <span class="inbox-section-count">${rows.length}</span>
+          <span class="dim inbox-section-hint">${escHtml(sec.hint)}</span>
+        </div>
+        ${rows.length ? `<div class="inbox-rows">${rows.map(r => renderInboxRow(r)).join("")}</div>` : `<p class="dim inbox-empty">Nothing here right now.</p>`}
+      </div>
+    `;
+  }).join("");
+
+  wrap.querySelectorAll(".inbox-row-head").forEach(el => {
+    el.addEventListener("click", () => {
+      const id = el.closest(".inbox-row").dataset.id;
+      inboxOpenId = inboxOpenId === id ? null : id;
+      renderInboxSections();
+    });
+  });
+
+  wrap.querySelectorAll(".inbox-send-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.id;
+      const row = inboxRows.find(r => r.id === id);
+      const textarea = wrap.querySelector(`.inbox-reply-input[data-id="${id}"]`);
+      const text = textarea.value.trim();
+      if (!text) return;
+      row.messages.push({ from: "agency", text, at: Date.now() });
+      // A real human reply from Needs Human View resolves that conversation —
+      // mirrors the design: AI handles the clean cases, a person's own send
+      // here is what counts as "handled" for the messy ones.
+      if (row.section === "needs_human") row.section = "handled";
+      saveInboxMock(inboxRows);
+      renderInboxSections();
+    });
+  });
+
+  // Fake "simulate a reply" control per row still in Needs Outreach / Awaiting
+  // Reply / Needs Follow-up — lets you see a creator's reply land and the AI
+  // sort it, without needing a real inbox to test against.
+  wrap.querySelectorAll(".inbox-sim-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const outcome = btn.dataset.outcome;
+      const row = inboxRows.find(r => r.id === id);
+      const SIM_REPLIES = {
+        agree: { text: "Yes, I'd love this! Just sent over my info.", section: "handled", autoText: "Amazing! Please fill out the form below with your shipping info and we'll get this right out to you: [form link]" },
+        decline: { text: "Thanks for thinking of me, but I'll pass this time!", section: "handled", autoText: "No worries at all, thanks for letting us know! We'd love to stay in touch for future opportunities." },
+        paid: { text: "Interested, but I only do paid partnerships, what's the budget?", section: "handled", autoText: "Totally understand! This one's gifting-only, but we'd love to have you — feel free to reach out to partnerships@agency-eight.com if a paid collab ever makes sense down the line." },
+        messy: { text: "Maybe, depends what else is involved — can you tell me more about the brand first?", section: "needs_human", autoText: null },
+      };
+      const sim = SIM_REPLIES[outcome];
+      row.messages.push({ from: "creator", text: sim.text, at: Date.now() });
+      row.section = sim.section;
+      if (sim.autoText) row.messages.push({ from: "agency", text: sim.autoText, at: Date.now() + 1000, auto: true });
+      saveInboxMock(inboxRows);
+      inboxOpenId = id;
+      renderInboxSections();
+    });
+  });
+}
+
+function renderInboxRow(row) {
+  const isOpen = inboxOpenId === row.id;
+  const last = row.messages[row.messages.length - 1];
+  const needsSimReply = ["awaiting_reply", "needs_followup"].includes(row.section);
+  return `
+    <div class="inbox-row ${isOpen ? "open" : ""}" data-id="${escHtml(row.id)}">
+      <div class="inbox-row-head">
+        <span class="inbox-row-name">${escHtml(row.name)}</span>
+        <span class="inbox-row-handle dim">${escHtml(row.handle)}</span>
+        <span class="inbox-row-snippet dim">${last ? escHtml(last.text.slice(0, 70)) + (last.text.length > 70 ? "…" : "") : "No messages yet"}</span>
+        ${needsSimReply ? `
+          <span class="inbox-sim-group" onclick="event.stopPropagation()">
+            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="agree">Simulate: Agree</button>
+            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="decline">Decline</button>
+            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="paid">Asks Paid</button>
+            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="messy">Messy reply</button>
+          </span>
+        ` : ""}
+      </div>
+      ${isOpen ? `
+        <div class="inbox-thread">
+          ${row.messages.length ? row.messages.map(m => `
+            <div class="inbox-bubble ${m.from === "agency" ? "agency" : "creator"}">
+              <div class="inbox-bubble-text">${escHtml(m.text)}</div>
+              <div class="inbox-bubble-meta">${m.auto ? "Auto-sent · " : ""}${fmtInboxTime(m.at)}</div>
+            </div>
+          `).join("") : `<p class="dim" style="padding:10px 0">No messages yet — this creator hasn't been reached out to.</p>`}
+          <div class="inbox-reply-row">
+            <textarea class="inbox-reply-input" data-id="${escHtml(row.id)}" placeholder="Type a reply…"></textarea>
+            <button class="btn btn-solid inbox-send-btn" type="button" data-id="${escHtml(row.id)}" style="padding:10px 20px;font-size:11px">Send</button>
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
 }
 
 // ── Tab 2: Outreach Copy (ports the standalone outreach-brief-creator tool

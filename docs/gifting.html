@@ -17,9 +17,11 @@
 </section>
 
 <section class="section src-section" style="padding-top:60px">
-  <div class="src-label">Gift Application</div>
-  <p class="review-summary" id="ga-summary"></p>
-  <div id="content"></div>
+  <div class="src-tabs" id="gift-tabs">
+    <button class="src-tab active" data-tab="applications" type="button">Gift Application</button>
+    <button class="src-tab" data-tab="bundles" type="button">Bundles <span class="mock-flag">Mockup</span></button>
+  </div>
+  <div id="tab-body"></div>
 </section>
 
 <div class="overlay hidden" id="ga-edit-overlay">
@@ -80,6 +82,22 @@ function ttCell(c, isDup) { return c.tt_handle ? platLink(c.tt_url, "@" + c.tt_h
 function cellOr(v) { return v ? escHtml(v) : `<span class="dim">—</span>`; }
 function fmtDate(ts) { return ts ? new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"; }
 
+const tabs = document.querySelectorAll(".src-tab");
+let activeTab = "applications";
+tabs.forEach(btn => {
+  btn.addEventListener("click", () => {
+    activeTab = btn.dataset.tab;
+    tabs.forEach(b => b.classList.toggle("active", b === btn));
+    renderActiveTab();
+  });
+});
+function renderActiveTab() {
+  if (activeTab === "bundles") renderBundlesTab();
+  else renderGiftAppTab();
+}
+
+function renderGiftAppTab() {
+document.getElementById("tab-body").innerHTML = `<p class="review-summary" id="ga-summary"></p><div id="content"></div>`;
 const known = loadKnown();
 const decisions = loadDecisions();
 let giftData = loadGiftData();
@@ -307,6 +325,247 @@ if (!approvedCreators.length) {
     render();
   });
 }
+} // end renderGiftAppTab
+
+// ── Bundles (MOCKUP) ─────────────────────────────────────────────────────
+// Lets someone define, per campaign, which Shopify products make up a
+// gifting bundle and which of those get offered to the creator as a choice
+// (a shade/size/scent) vs. sent as-is. The product search below stands in
+// for a real call to Shopify's productVariants API (query: title/sku/vendor
+// filters, returns real variant id + sku) — no real Shopify store is
+// connected yet, so this is a small fake catalog instead, built to test the
+// actual screen/interaction before wiring in the real search.
+const BUNDLES_KEY = "a8i_bundles_mock";
+const MOCK_CATALOG = [
+  { productId: "9000001", product: "Daily Glow Serum", variants: [
+    { variantId: "90000011", title: "30ml", sku: "DGS-030" },
+    { variantId: "90000012", title: "50ml", sku: "DGS-050" },
+  ]},
+  { productId: "9000002", product: "Restore Body Oil", variants: [
+    { variantId: "90000021", title: "Citrus Grove", sku: "RBO-CIT" },
+    { variantId: "90000022", title: "Warm Vanilla", sku: "RBO-VAN" },
+    { variantId: "90000023", title: "Unscented", sku: "RBO-UNS" },
+  ]},
+  { productId: "9000003", product: "Calm Candle", variants: [
+    { variantId: "90000031", title: "Lavender Fields", sku: "CC-LAV" },
+    { variantId: "90000032", title: "Sandalwood", sku: "CC-SAN" },
+    { variantId: "90000033", title: "Sea Salt", sku: "CC-SEA" },
+  ]},
+  { productId: "9000004", product: "Hydration Mist", variants: [
+    { variantId: "90000041", title: "Rosewater", sku: "HM-ROS" },
+  ]},
+  { productId: "9000005", product: "Travel Pouch", variants: [
+    { variantId: "90000051", title: "Standard", sku: "TP-STD" },
+  ]},
+];
+
+function loadBundles() { try { return JSON.parse(localStorage.getItem(BUNDLES_KEY) || "null") || []; } catch { return []; } }
+function saveBundles(b) { localStorage.setItem(BUNDLES_KEY, JSON.stringify(b)); }
+
+// Stands in for calling Shopify's productVariants(query: "...") — a real
+// implementation sends this same search string straight to the Admin API
+// instead of filtering a local array.
+function searchCatalog(q) {
+  q = (q || "").trim().toLowerCase();
+  if (!q) return [];
+  return MOCK_CATALOG.filter(p =>
+    p.product.toLowerCase().includes(q) ||
+    p.variants.some(v => v.title.toLowerCase().includes(q) || v.sku.toLowerCase().includes(q))
+  );
+}
+
+let bundles = null;
+let bundleSearchOpenFor = null; // bundle id currently showing its "+ Add Product" search
+
+function renderBundlesTab() {
+  if (!bundles) bundles = loadBundles();
+  document.getElementById("tab-body").innerHTML = `
+    <p class="review-summary">Define what's actually in a campaign's gifting bundle — which products, and which of those a creator gets to choose a shade/size/scent for — so the form and the eventual order both know exactly what to send. Searching for a product below stands in for a real live search against the client's own Shopify catalog; nothing here is connected to a real store yet.</p>
+    <div class="src-toolbar">
+      <button class="btn btn-solid" type="button" id="bundle-new-btn" style="padding:10px 20px;font-size:11px">+ New Bundle</button>
+    </div>
+    <div id="bundle-list"></div>
+  `;
+  document.getElementById("bundle-new-btn").addEventListener("click", () => {
+    const name = prompt("Bundle name (e.g. \"Fall 2026\")");
+    if (!name || !name.trim()) return;
+    bundles.push({ id: "b" + Date.now(), name: name.trim(), components: [] });
+    saveBundles(bundles);
+    renderBundleList();
+  });
+  renderBundleList();
+}
+
+function renderBundleList() {
+  const wrap = document.getElementById("bundle-list");
+  if (!bundles.length) {
+    wrap.innerHTML = `<div class="empty-state">No bundles yet. Click "+ New Bundle" to define this month's gifting selection.</div>`;
+    return;
+  }
+  wrap.innerHTML = bundles.map(b => `
+    <div class="bundle-card" data-id="${escHtml(b.id)}">
+      <div class="bundle-card-head">
+        <span class="bundle-name">${escHtml(b.name)}</span>
+        <span class="dim">${b.components.length} product${b.components.length === 1 ? "" : "s"}</span>
+        <button class="btn-icon bundle-del-btn" type="button" data-id="${escHtml(b.id)}" title="Delete bundle" style="margin-left:auto">&times;</button>
+      </div>
+      <div class="bundle-components">
+        ${b.components.map((comp, i) => renderBundleComponent(b, comp, i)).join("")}
+      </div>
+      ${bundleSearchOpenFor === b.id ? renderBundleSearch(b) : `
+        <button class="btn btn-outline bundle-add-product-btn" type="button" data-id="${escHtml(b.id)}" style="padding:8px 16px;font-size:11px;margin-top:10px">+ Add Product</button>
+      `}
+    </div>
+  `).join("");
+
+  wrap.querySelectorAll(".bundle-del-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      bundles = bundles.filter(b => b.id !== btn.dataset.id);
+      saveBundles(bundles);
+      renderBundleList();
+    });
+  });
+  wrap.querySelectorAll(".bundle-add-product-btn").forEach(btn => {
+    btn.addEventListener("click", () => { bundleSearchOpenFor = btn.dataset.id; renderBundleList(); });
+  });
+  wrap.querySelectorAll(".bundle-search-input").forEach(inp => {
+    inp.addEventListener("input", () => renderBundleSearchResults(inp.closest(".bundle-card").dataset.id, inp.value));
+    inp.focus();
+  });
+  wrap.querySelectorAll(".bundle-search-cancel").forEach(btn => {
+    btn.addEventListener("click", () => { bundleSearchOpenFor = null; renderBundleList(); });
+  });
+  wrap.querySelectorAll(".bundle-result-add").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const bundleId = btn.dataset.bundleId;
+      const productId = btn.dataset.productId;
+      const b = bundles.find(x => x.id === bundleId);
+      const product = MOCK_CATALOG.find(p => p.productId === productId);
+      b.components.push({
+        productId: product.productId,
+        productName: product.product,
+        mode: product.variants.length > 1 ? "choice" : "fixed",
+        offeredVariantIds: product.variants.map(v => v.variantId), // all offered by default
+        fixedVariantId: product.variants[0].variantId,
+      });
+      saveBundles(bundles);
+      bundleSearchOpenFor = null;
+      renderBundleList();
+    });
+  });
+  wrap.querySelectorAll(".bundle-comp-mode").forEach(sel => {
+    sel.addEventListener("change", () => {
+      const b = bundles.find(x => x.id === sel.dataset.bundleId);
+      const comp = b.components[+sel.dataset.i];
+      comp.mode = sel.value;
+      saveBundles(bundles);
+      renderBundleList();
+    });
+  });
+  wrap.querySelectorAll(".bundle-comp-variant-chk").forEach(chk => {
+    chk.addEventListener("change", () => {
+      const b = bundles.find(x => x.id === chk.dataset.bundleId);
+      const comp = b.components[+chk.dataset.i];
+      const vid = chk.dataset.variantId;
+      if (chk.checked) { if (!comp.offeredVariantIds.includes(vid)) comp.offeredVariantIds.push(vid); }
+      else { comp.offeredVariantIds = comp.offeredVariantIds.filter(id => id !== vid); }
+      saveBundles(bundles);
+    });
+  });
+  wrap.querySelectorAll(".bundle-comp-fixed-sel").forEach(sel => {
+    sel.addEventListener("change", () => {
+      const b = bundles.find(x => x.id === sel.dataset.bundleId);
+      const comp = b.components[+sel.dataset.i];
+      comp.fixedVariantId = sel.value;
+      saveBundles(bundles);
+    });
+  });
+  wrap.querySelectorAll(".bundle-comp-remove").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const b = bundles.find(x => x.id === btn.dataset.bundleId);
+      b.components.splice(+btn.dataset.i, 1);
+      saveBundles(bundles);
+      renderBundleList();
+    });
+  });
+}
+
+function renderBundleSearch(b) {
+  return `
+    <div class="bundle-search">
+      <input type="search" class="bundle-search-input" placeholder="Search the client's Shopify catalog…">
+      <div class="bundle-search-results" id="bundle-search-results"></div>
+      <button class="btn btn-outline bundle-search-cancel" type="button" style="padding:7px 14px;font-size:11px;margin-top:8px">Cancel</button>
+    </div>
+  `;
+}
+function renderBundleSearchResults(bundleId, query) {
+  const results = searchCatalog(query);
+  document.getElementById("bundle-search-results").innerHTML = results.length ? results.map(p => `
+    <div class="bundle-search-result">
+      <span>${escHtml(p.product)}</span>
+      <span class="dim">${p.variants.length} variant${p.variants.length === 1 ? "" : "s"}</span>
+      <button class="btn-icon bundle-result-add" type="button" data-bundle-id="${escHtml(bundleId)}" data-product-id="${escHtml(p.productId)}" title="Add to bundle">+</button>
+    </div>
+  `).join("") : (query.trim() ? `<p class="dim" style="padding:8px 0">No matches in the catalog.</p>` : "");
+  document.querySelectorAll(".bundle-result-add").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const bundleIdX = btn.dataset.bundleId;
+      const productIdX = btn.dataset.productId;
+      const b = bundles.find(x => x.id === bundleIdX);
+      const product = MOCK_CATALOG.find(p => p.productId === productIdX);
+      b.components.push({
+        productId: product.productId,
+        productName: product.product,
+        mode: product.variants.length > 1 ? "choice" : "fixed",
+        offeredVariantIds: product.variants.map(v => v.variantId),
+        fixedVariantId: product.variants[0].variantId,
+      });
+      saveBundles(bundles);
+      bundleSearchOpenFor = null;
+      renderBundleList();
+    });
+  });
+}
+
+function renderBundleComponent(b, comp, i) {
+  const product = MOCK_CATALOG.find(p => p.productId === comp.productId);
+  const variants = product ? product.variants : [];
+  return `
+    <div class="bundle-component">
+      <div class="bundle-component-head">
+        <span class="bundle-component-name">${escHtml(comp.productName)}</span>
+        <select class="bundle-comp-mode" data-bundle-id="${escHtml(b.id)}" data-i="${i}" ${variants.length <= 1 ? "disabled" : ""}>
+          <option value="fixed" ${comp.mode === "fixed" ? "selected" : ""}>Fixed — always the same</option>
+          <option value="choice" ${comp.mode === "choice" ? "selected" : ""}>Creator chooses</option>
+        </select>
+        <button class="btn-icon bundle-comp-remove" type="button" data-bundle-id="${escHtml(b.id)}" data-i="${i}" title="Remove from bundle" style="margin-left:auto">&times;</button>
+      </div>
+      ${comp.mode === "fixed" ? `
+        <div class="bundle-component-body">
+          <label class="dim" style="font-size:11.5px">Variant sent to every creator:</label>
+          <select class="bundle-comp-fixed-sel" data-bundle-id="${escHtml(b.id)}" data-i="${i}">
+            ${variants.map(v => `<option value="${escHtml(v.variantId)}" ${comp.fixedVariantId === v.variantId ? "selected" : ""}>${escHtml(v.title)} (${escHtml(v.sku)})</option>`).join("")}
+          </select>
+        </div>
+      ` : `
+        <div class="bundle-component-body">
+          <label class="dim" style="font-size:11.5px">Options offered to the creator on the gift form:</label>
+          <div class="bundle-variant-options">
+            ${variants.map(v => `
+              <label class="bundle-variant-opt">
+                <input type="checkbox" class="bundle-comp-variant-chk" data-bundle-id="${escHtml(b.id)}" data-i="${i}" data-variant-id="${escHtml(v.variantId)}" ${comp.offeredVariantIds.includes(v.variantId) ? "checked" : ""}>
+                ${escHtml(v.title)} <span class="dim">(${escHtml(v.sku)})</span>
+              </label>
+            `).join("")}
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+renderActiveTab();
 </script>
 </body>
 </html>
