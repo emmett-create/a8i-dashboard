@@ -415,21 +415,27 @@ def outreach_oauth_callback(request: Request):
     return RedirectResponse("/")
 
 
+# Sends to a genuinely separate account, not back to the connected test
+# inbox itself — found 2026-11-04 that a self-addressed test email makes a
+# reply from that same account still carry Gmail's SENT label (correct
+# behavior, not a bug), so our own is_outgoing check couldn't tell it apart
+# from a real incoming reply. A different recipient account fixes that.
+TEST_CREATOR_EMAIL = "emmettdunn4@gmail.com"
+
+
 @app.post("/api/outreach/send")
 def outreach_send():
-    """Sends a real test outreach email to the connected test account itself
-    (closed-loop test) — not meant to send to arbitrary addresses yet."""
+    """Sends a real test outreach email to a separate test "creator" inbox."""
     service = _gmail_service()
-    me = service.users().getProfile(userId="me").execute()["emailAddress"]
     msg = email.mime.text.MIMEText(
         "Hi! This is a test outreach email from the A8i prototype.\n\n"
         "Reply to this email to test the reply-detection flow.\n\n- A8i test"
     )
-    msg["to"] = me
+    msg["to"] = TEST_CREATOR_EMAIL
     msg["subject"] = TEST_SUBJECT
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
-    return {"sent": True, "to": me, "thread_id": sent["threadId"]}
+    return {"sent": True, "to": TEST_CREATOR_EMAIL, "thread_id": sent["threadId"]}
 
 
 @app.get("/api/outreach/replies")
