@@ -8,15 +8,27 @@ is to see where real, messy client data holds up or breaks against the
 kind of free-text filters Onboarding collects, before investing in
 anything smarter.
 """
+import base64
+import email.mime.text
 import json
+import os
 import re
 import time
 import uuid
+from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile
+from dotenv import load_dotenv
+load_dotenv()
+os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # local-dev only, see a8i-email-test
+
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from google.oauth2 import service_account
 from googleapiclient.discovery import build as gbuild
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
+import anthropic
 
 import config
 
@@ -316,6 +328,144 @@ async def delete_brief(session_id: str, file_id: str):
     stored = _briefs_by_session.get(session_id, [])
     _briefs_by_session[session_id] = [f for f in stored if f["id"] != file_id]
     return {"files": _briefs_by_session[session_id]}
+
+# ── Outreach / Inbox (Gmail OAuth + CASA path test, 2026-11-04) ──────────────
+# Wires the Outreach page's "Inbox" mockup tab to a real Gmail test account
+# (a8itesting@gmail.com) instead of the seeded localStorage data — same code
+# proven out standalone in the a8i-email-test repo, moved here so it's
+# visible in the actual site instead of a terminal. Token reused from that
+# same project (same OAuth client, same granted scopes), so this shouldn't
+# need a fresh consent unless the Testing-mode 7-day token expiry hits.
+BASE_DIR = Path(__file__).parent
+TOKEN_FILE = BASE_DIR / "token.json"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8910/api/outreach/oauth/callback")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly",
+]
+TEST_SUBJECT = "A8i test outreach — please reply"
+
+
+def _flow() -> Flow:
+    client_config = {
+        "web": {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [GOOGLE_REDIRECT_URI],
+        }
+    }
+    return Flow.from_client_config(client_config, scopes=GMAIL_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI)
+
+
+def _gmail_service():
+    creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), GMAIL_SCOPES)
+    return gbuild("gmail", "v1", credentials=creds)
+
+
+def _extract_body(payload: dict) -> str:
+    if payload.get("body", {}).get("data"):
+        return base64.urlsafe_b64decode(payload["body"]["data"]).decode(errors="replace")
+    for part in payload.get("parts", []) or []:
+        if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
+            return base64.urlsafe_b64decode(part["body"]["data"]).decode(errors="replace")
+        nested = _extract_body(part)
+        if nested:
+            return nested
+    return ""
+
+
+def _classify(reply_text: str) -> str:
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    resp = client.messages.create(
+        model="claude-haiku-5-5",
+        max_tokens=20,
+        system=(
+            "You're sorting a creator's reply to a gifting outreach email into exactly "
+            "one category: Agree, Decline, Asks For Paid, or Needs Human Review (use "
+            "this last one for anything hedged, ambiguous, bundling an extra question, "
+            "or an out-of-office reply). Reply with ONLY the category name, nothing else."
+        ),
+        messages=[{"role": "user", "content": reply_text}],
+    )
+    return resp.content[0].text.strip()
+
+
+@app.get("/api/outreach/status")
+def outreach_status():
+    return {"connected": TOKEN_FILE.exists()}
+
+
+@app.get("/api/outreach/connect")
+def outreach_connect():
+    flow = _flow()
+    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+    return RedirectResponse(auth_url)
+
+
+@app.get("/api/outreach/oauth/callback")
+def outreach_oauth_callback(request: Request):
+    flow = _flow()
+    flow.fetch_token(authorization_response=str(request.url))
+    TOKEN_FILE.write_text(flow.credentials.to_json())
+    return RedirectResponse("/")
+
+
+@app.post("/api/outreach/send")
+def outreach_send():
+    """Sends a real test outreach email to the connected test account itself
+    (closed-loop test) — not meant to send to arbitrary addresses yet."""
+    service = _gmail_service()
+    me = service.users().getProfile(userId="me").execute()["emailAddress"]
+    msg = email.mime.text.MIMEText(
+        "Hi! This is a test outreach email from the A8i prototype.\n\n"
+        "Reply to this email to test the reply-detection flow.\n\n- A8i test"
+    )
+    msg["to"] = me
+    msg["subject"] = TEST_SUBJECT
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    return {"sent": True, "to": me, "thread_id": sent["threadId"]}
+
+
+@app.get("/api/outreach/replies")
+def outreach_replies():
+    """Real inbox data for the Outreach page's Inbox tab, replacing the
+    seeded localStorage mock. Each reply gets classified via Claude if
+    ANTHROPIC_API_KEY is set."""
+    service = _gmail_service()
+    results = service.users().messages().list(
+        userId="me", q=f'subject:"{TEST_SUBJECT}"'
+    ).execute()
+    message_refs = results.get("messages", [])
+
+    out = []
+    for ref in message_refs:
+        full = service.users().messages().get(userId="me", id=ref["id"], format="full").execute()
+        headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
+        body = _extract_body(full["payload"]).strip()
+        is_outgoing = "SENT" in (full.get("labelIds") or [])
+        entry = {
+            "id": ref["id"],
+            "from": headers.get("From"),
+            "subject": headers.get("Subject"),
+            "snippet": full.get("snippet"),
+            "body": body,
+            "is_outgoing": is_outgoing,
+        }
+        # Only classify genuine replies — classifying our own sent message
+        # against Agree/Decline/Asks-For-Paid isn't a meaningful test, and
+        # that's exactly the imprecision flagged after the standalone test.
+        if ANTHROPIC_API_KEY and body and not is_outgoing:
+            entry["classification"] = _classify(body)
+        out.append(entry)
+
+    return {"count": len(out), "messages": out}
+
 
 @app.get("/")
 def root():

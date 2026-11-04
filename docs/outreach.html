@@ -575,12 +575,82 @@ function fmtInboxTime(ts) {
 let inboxRows = null;
 let inboxOpenId = null;
 
+// ── Live test connection (2026-11-04) — the ONE real thread, proven against
+// an actual Gmail account via the Gmail OAuth + CASA path, sitting alongside
+// the illustrative multi-creator mock below rather than replacing it (we
+// only have one real connected thread so far, not a real multi-creator
+// dataset — this panel is honest about being the real proof, not a demo of
+// the full CRM view). Backend: app.py's /api/outreach/* routes, same code
+// already proven standalone in the a8i-email-test repo.
+const OUTREACH_API = "http://localhost:8910";
+
+async function renderLiveTestPanel() {
+  const el = document.getElementById("live-test-panel");
+  if (!el) return;
+  el.innerHTML = `<p class="dim">Checking connection…</p>`;
+  let status;
+  try {
+    status = await fetch(`${OUTREACH_API}/api/outreach/status`).then(r => r.json());
+  } catch {
+    el.innerHTML = `<p class="dim">Can't reach the local backend at ${escHtml(OUTREACH_API)} — is it running? (<code>uvicorn app:app --port 8910</code> from the repo root)</p>`;
+    return;
+  }
+
+  if (!status.connected) {
+    el.innerHTML = `
+      <p>Not connected yet.</p>
+      <a class="btn btn-solid" href="${OUTREACH_API}/api/outreach/connect" target="_blank" rel="noopener">Connect a8itesting@gmail.com</a>
+    `;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-outline" type="button" id="live-send">Send test outreach</button>
+      <button class="btn btn-outline" type="button" id="live-refresh">Check for replies</button>
+    </div>
+    <div id="live-thread"><p class="dim">Connected. Send a test outreach email, reply to it from the inbox, then check for replies.</p></div>
+  `;
+  document.getElementById("live-send").addEventListener("click", async () => {
+    document.getElementById("live-thread").innerHTML = `<p class="dim">Sending…</p>`;
+    const r = await fetch(`${OUTREACH_API}/api/outreach/send`, { method: "POST" }).then(r => r.json());
+    document.getElementById("live-thread").innerHTML = `<p class="dim">Sent to ${escHtml(r.to)}. Go reply to it, then click "Check for replies."</p>`;
+  });
+  document.getElementById("live-refresh").addEventListener("click", renderLiveThread);
+  renderLiveThread();
+}
+
+async function renderLiveThread() {
+  const wrap = document.getElementById("live-thread");
+  wrap.innerHTML = `<p class="dim">Loading…</p>`;
+  const data = await fetch(`${OUTREACH_API}/api/outreach/replies`).then(r => r.json());
+  if (!data.count) {
+    wrap.innerHTML = `<p class="dim">No messages yet — send a test outreach email first.</p>`;
+    return;
+  }
+  wrap.innerHTML = data.messages.map(m => `
+    <div class="inbox-row" style="margin-bottom:8px">
+      <div class="inbox-row-head" style="cursor:default">
+        <strong>${m.is_outgoing ? "You (sent)" : escHtml(m.from || "")}</strong>
+        ${m.classification ? `<span class="badge">${escHtml(m.classification)}</span>` : ""}
+      </div>
+      <p class="dim" style="margin-top:4px;white-space:pre-wrap">${escHtml(m.snippet || "")}</p>
+    </div>
+  `).join("");
+}
+
 function renderInboxTab() {
   if (!inboxRows) inboxRows = loadInboxMock();
 
   content.innerHTML = `
     <div class="src-label">Inbox</div>
-    <p class="review-summary">Every creator conversation, organized by what needs to happen next — not a real inbox yet, this is sample data so the layout and interaction can be tried before the real Gmail/Resend/reply-to-address connection is built.</p>
+
+    <div class="src-label" style="font-size:14px;margin-top:0">Live test connection</div>
+    <p class="review-summary">The real Gmail OAuth + CASA path, connected to one real test account — this is the actual mechanism working, not a mockup.</p>
+    <div id="live-test-panel" class="inbox-mock-note"></div>
+
+    <div class="src-label" style="font-size:14px;margin-top:24px">Full inbox view (illustrative)</div>
+    <p class="review-summary">Every creator conversation, organized by what needs to happen next — sample data so the layout and interaction can be tried, since we only have one real connected thread so far (above), not a full real dataset.</p>
     <div class="inbox-mock-note">
       <strong>Mockup, not live:</strong> sending here just appends to a fake thread saved in this browser. Nothing is actually emailed. Reset the sample data any time.
       <button class="btn-icon" type="button" id="inbox-reset" title="Reset sample data">&#8635;</button>
@@ -595,6 +665,7 @@ function renderInboxTab() {
     renderInboxSections();
   });
 
+  renderLiveTestPanel();
   renderInboxSections();
 }
 
