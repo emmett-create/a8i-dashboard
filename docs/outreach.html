@@ -143,32 +143,14 @@ function renderActiveTab() {
 }
 
 // ── Initial Outreach / Follow-up #1 batch sending — ported from Caroline's
-// Merit seeding system (the real backend A8I is modeled on), minus anything
-// that needs Mailmeteor's own API/webhooks (it has none — no auto-scheduled
-// follow-up tied to its send behavior, no click/reply/bounce tracking).
-// Eligibility rules, the CSV format, first-name cleaning, and undo are the
-// same idea, adapted to A8I's single flat creator list rather than Merit's
-// cross-campaign checks.
+// Merit seeding system (the real backend A8I is modeled on). Each send is
+// simulated (no email provider connected yet) rather than routed through
+// Mailmeteor — picking people and hitting Send just marks them sent and
+// personalizes their message from Outreach Copy. Eligibility rules and
+// undo are the same idea, adapted to A8I's single flat creator list rather
+// than Merit's cross-campaign checks.
 const FOLLOWUP_DELAY_DAYS = 3; // matches Merit's own default "Follow-up days"
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-// "kenny_reilly" -> "Kenny", "DR. O'BRIEN (she/her)" -> "O'Brien", emoji/@
-// stripped, ALL CAPS/lowercase -> Title Case, mixed case like McDonald kept.
-function cleanFirstName(fullName) {
-  if (!fullName) return "";
-  let name = String(fullName).trim().split(/\s+/)[0] || "";
-  name = name.replace(/\(.*?\)/g, "");
-  name = name.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, "");
-  name = name.replace(/^(dr|mr|mrs|ms|miss|prof)\.?$/i, "");
-  name = name.replace(/@/g, "");
-  name = (name.split(/[_.\d]+/)[0] || name).trim();
-  if (!name) return "";
-  const looksMixedCase = /[a-z][A-Z]/.test(name);
-  if (!looksMixedCase) {
-    name = name.toLowerCase().replace(/(^|['-])([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase());
-  }
-  return name;
-}
 
 // Adapted from Merit's rules (has an email, not do-not-contact, not emailed
 // elsewhere recently, not already gifted) — the "emailed elsewhere recently"
@@ -193,28 +175,21 @@ function isEligibleFollowup(t) {
 
 let lastBatch = null; // { kind, ids, prev: {id: {...tracking snapshot before the batch}} }
 
-function downloadCsv(filename, rows) {
-  const csvCell = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const csv = rows.map(r => r.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
-
 function openOutreachBatchModal(kind, approvedCreators) {
   const isInitial = kind === "initial";
   const title = isInitial ? "Initial Outreach" : "Follow-up #1";
+  const msgNum = isInitial ? 1 : 2;
+  const msgTemplate = loadOutreachMessages()[msgNum] || "";
   const verticalOptions = [...new Set(approvedCreators.map(c => c.vertical).filter(Boolean))].sort();
   const genderOptions = [...new Set(approvedCreators.map(c => c.gender).filter(Boolean))].sort();
 
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   overlay.innerHTML = `
-    <div class="modal-card" style="max-width:640px">
+    <div class="modal-card" style="max-width:640px;max-height:85vh;overflow-y:auto">
       <h3>${escHtml(title)}</h3>
-      <p>Eligibility: has an email, not Do Not Contact, not already gifted${isInitial ? "" : `, sent the initial email at least ${FOLLOWUP_DELAY_DAYS} days ago`}.</p>
+      <p>Eligibility: has an email, not Do Not Contact, not already gifted${isInitial ? "" : `, sent the initial email at least ${FOLLOWUP_DELAY_DAYS} days ago`}. Each email below is message #${msgNum} from Outreach Copy, personalized with that creator's name.</p>
+      ${!msgTemplate ? `<p style="color:var(--amber);font-size:12.5px;margin-bottom:14px">No Outreach Copy generated yet for message #${msgNum} — generate it on the Outreach Copy tab first, or these will send blank.</p>` : ""}
       <div class="field">
         <div class="field-row field-row-3" style="margin-bottom:0">
           <select id="batch-filter-vertical"><option value="">All verticals</option>${verticalOptions.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join("")}</select>
@@ -222,20 +197,24 @@ function openOutreachBatchModal(kind, approvedCreators) {
           <input type="text" id="batch-filter-location" placeholder="Location contains…">
         </div>
       </div>
-      <p id="batch-eligible-count" style="font-weight:600;margin-bottom:10px"></p>
-      <div class="field" style="margin-bottom:16px">
-        <label>How many do you want to send?</label>
-        <input type="number" id="batch-send-count" min="0" value="0">
+      <div class="batch-select-row">
+        <span id="batch-eligible-count"></span>
+        <button class="btn-link" type="button" id="batch-select-all">Select all</button>
+        <button class="btn-link" type="button" id="batch-select-none">Select none</button>
       </div>
-      <div class="modal-actions">
+      <div class="batch-list" id="batch-list"></div>
+      <div class="modal-actions" style="margin-top:16px">
         <button class="btn btn-outline" type="button" id="batch-cancel">Cancel</button>
-        <button class="btn btn-solid" type="button" id="batch-confirm">Mark Sent &amp; Download CSV</button>
+        <button class="btn btn-solid" type="button" id="batch-confirm">Send <span id="batch-send-count">0</span> Email<span id="batch-send-plural">s</span></button>
       </div>
+      <p class="dim" style="font-size:11px;margin-top:10px">No email provider is connected yet — this marks each selected creator as sent and uses their personalized message, but doesn't actually deliver anything.</p>
     </div>
   `;
   document.body.appendChild(overlay);
 
   let eligible = [];
+  let selected = new Set();
+
   function recompute() {
     const vertical = document.getElementById("batch-filter-vertical").value;
     const gender = document.getElementById("batch-filter-gender").value;
@@ -248,15 +227,56 @@ function openOutreachBatchModal(kind, approvedCreators) {
       if (loc && !(c.location || "").toLowerCase().includes(loc)) return false;
       return true;
     });
+    selected = new Set(eligible.map(c => c.id)); // narrowing the filters defaults back to "everyone shown"
     document.getElementById("batch-eligible-count").textContent = `${eligible.length.toLocaleString()} eligible`;
-    const countInput = document.getElementById("batch-send-count");
-    countInput.max = eligible.length;
-    if (countInput.dataset.touched !== "1" || +countInput.value > eligible.length) countInput.value = eligible.length;
+    renderList();
   }
+
+  function renderList() {
+    const list = document.getElementById("batch-list");
+    list.innerHTML = eligible.length ? eligible.map(c => {
+      const personalized = msgTemplate.replace(/\[NAME\]/g, c.name);
+      const preview = personalized
+        ? escHtml(personalized.slice(0, 90)) + (personalized.length > 90 ? "…" : "")
+        : `<span class="dim">No message generated</span>`;
+      return `
+        <label class="batch-row">
+          <input type="checkbox" class="batch-chk" data-id="${escHtml(c.id)}" ${selected.has(c.id) ? "checked" : ""}>
+          <div class="batch-row-body">
+            <div class="batch-row-head"><strong>${escHtml(c.name)}</strong><span class="dim">@${escHtml(c.ig_handle || c.tt_handle || "—")}</span></div>
+            <div class="batch-row-preview">${preview}</div>
+          </div>
+        </label>
+      `;
+    }).join("") : `<p class="dim" style="padding:16px 0">No one matches these filters.</p>`;
+
+    list.querySelectorAll(".batch-chk").forEach(chk => {
+      chk.addEventListener("change", () => {
+        if (chk.checked) selected.add(chk.dataset.id); else selected.delete(chk.dataset.id);
+        updateSendCount();
+      });
+    });
+    updateSendCount();
+  }
+
+  function updateSendCount() {
+    const n = eligible.filter(c => selected.has(c.id)).length;
+    document.getElementById("batch-send-count").textContent = n;
+    document.getElementById("batch-send-plural").textContent = n === 1 ? "" : "s";
+  }
+
   ["batch-filter-vertical", "batch-filter-gender", "batch-filter-location"].forEach(id => {
     document.getElementById(id).addEventListener("input", recompute);
   });
-  document.getElementById("batch-send-count").addEventListener("input", e => { e.target.dataset.touched = "1"; });
+  document.getElementById("batch-select-all").addEventListener("click", () => {
+    eligible.forEach(c => selected.add(c.id));
+    renderList();
+  });
+  document.getElementById("batch-select-none").addEventListener("click", () => {
+    selected.clear();
+    renderList();
+  });
+
   recompute();
 
   function close() { overlay.remove(); }
@@ -264,9 +284,8 @@ function openOutreachBatchModal(kind, approvedCreators) {
   overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
 
   document.getElementById("batch-confirm").addEventListener("click", () => {
-    const n = Math.max(0, Math.min(+document.getElementById("batch-send-count").value || 0, eligible.length));
-    if (n === 0) { close(); return; }
-    const batch = eligible.slice(0, n);
+    const batch = eligible.filter(c => selected.has(c.id));
+    if (!batch.length) { close(); return; }
     const prev = {};
     const newStage = isInitial ? "Initial Email Sent" : "Email Follow-up #1";
     const tsField = isInitial ? "outreachSentAt" : "followupSentAt";
@@ -277,13 +296,8 @@ function openOutreachBatchModal(kind, approvedCreators) {
     saveTracking(tracking);
     lastBatch = { kind, ids: batch.map(c => c.id), prev };
 
-    downloadCsv(`a8i-${kind}-outreach-${new Date().toISOString().slice(0, 10)}.csv`,
-      [["First Name", "Email", "Handle"], ...batch.map(c => [
-        cleanFirstName(c.name), (tracking[c.id] || {}).email || "", c.ig_handle || c.tt_handle || "",
-      ])]);
-
     close();
-    showUndoBanner(`${batch.length} creator${batch.length === 1 ? "" : "s"} marked "${newStage}".`);
+    showUndoBanner(`${batch.length} email${batch.length === 1 ? "" : "s"} "sent" (simulated) — marked "${newStage}".`);
     renderTrackingTab();
   });
 }

@@ -560,6 +560,19 @@ table.weekly-table { border-collapse: collapse; width: 100%; table-layout: fixed
 .status-pip.stage-green { background: rgba(26,122,26,.1); color: var(--green); }
 .fg-link { font-size: 11px; color: var(--dim); }
 
+/* Outreach batch-send modal — per-person checklist with a message preview */
+.btn-link { background: none; border: none; color: var(--red); font-size: 11.5px; font-weight: 700; cursor: pointer; padding: 0; }
+.btn-link:hover { text-decoration: underline; }
+.batch-select-row { display: flex; align-items: center; gap: 16px; margin-bottom: 10px; font-size: 12.5px; font-weight: 600; }
+.batch-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); margin-bottom: 6px; }
+.batch-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.batch-row:last-child { border-bottom: none; }
+.batch-row:hover { background: var(--ivory); }
+.batch-row input[type=checkbox] { margin-top: 3px; accent-color: var(--red); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+.batch-row-body { min-width: 0; flex: 1; }
+.batch-row-head { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; margin-bottom: 3px; }
+.batch-row-preview { font-size: 12px; color: var(--dim); line-height: 1.4; }
+
 /* ── Gift Application form (creator-facing, single-use link) ─────────────── */
 .form-page-body { background: var(--ivory); }
 .form-page-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
