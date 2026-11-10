@@ -565,13 +565,24 @@ table.weekly-table { border-collapse: collapse; width: 100%; table-layout: fixed
 .btn-link:hover { text-decoration: underline; }
 .batch-select-row { display: flex; align-items: center; gap: 16px; margin-bottom: 10px; font-size: 12.5px; font-weight: 600; }
 .batch-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); margin-bottom: 6px; }
-.batch-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.batch-row { padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .batch-row:last-child { border-bottom: none; }
 .batch-row:hover { background: var(--ivory); }
+.batch-row-top { display: flex; align-items: flex-start; gap: 12px; }
+.batch-row-main { display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; cursor: pointer; }
 .batch-row input[type=checkbox] { margin-top: 3px; accent-color: var(--red); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
 .batch-row-body { min-width: 0; flex: 1; }
 .batch-row-head { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; margin-bottom: 3px; }
 .batch-row-preview { font-size: 12px; color: var(--dim); line-height: 1.4; }
+.batch-edited-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--amber); background: rgba(184,105,10,.1); border: 1px solid rgba(184,105,10,.3); border-radius: 20px; padding: 1px 7px; }
+.batch-row-edit-btn { flex-shrink: 0; }
+.batch-row-editor, .batch-template-editor { margin-top: 10px; }
+.batch-row-editor textarea, .batch-template-editor textarea {
+  width: 100%; font-family: var(--display); font-size: 13px; color: var(--black);
+  padding: 10px; border: 1.5px solid var(--line); border-radius: 0; background: var(--white); resize: vertical;
+}
+.batch-row-editor textarea:focus, .batch-template-editor textarea:focus { outline: none; border-color: var(--red); }
+.batch-template-editor { padding: 14px; background: var(--ivory); border: 1px solid var(--line); margin-bottom: 14px; }
 
 /* ── Gift Application form (creator-facing, single-use link) ─────────────── */
 .form-page-body { background: var(--ivory); }

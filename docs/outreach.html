@@ -183,13 +183,27 @@ function openOutreachBatchModal(kind, approvedCreators) {
   const verticalOptions = [...new Set(approvedCreators.map(c => c.vertical).filter(Boolean))].sort();
   const genderOptions = [...new Set(approvedCreators.map(c => c.gender).filter(Boolean))].sort();
 
+  // `editedTemplate` is the working copy applied to everyone who hasn't been
+  // individually edited — starts as Outreach Copy's generated message, but
+  // "Edit copy for all" can rewrite it for this send only (doesn't touch
+  // what's saved on the Outreach Copy tab). `overrides` holds anyone whose
+  // own message was hand-edited individually; those always win over the
+  // bulk template, for that person, until reset.
+  let editedTemplate = msgTemplate;
+  const overrides = {};
+  let editingRowId = null;
+
+  function effectiveMessage(c) {
+    return overrides[c.id] != null ? overrides[c.id] : editedTemplate.replace(/\[NAME\]/g, c.name);
+  }
+
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   overlay.innerHTML = `
     <div class="modal-card" style="max-width:640px;max-height:85vh;overflow-y:auto">
       <h3>${escHtml(title)}</h3>
       <p>Eligibility: has an email, not Do Not Contact, not already gifted${isInitial ? "" : `, sent the initial email at least ${FOLLOWUP_DELAY_DAYS} days ago`}. Each email below is message #${msgNum} from Outreach Copy, personalized with that creator's name.</p>
-      ${!msgTemplate ? `<p style="color:var(--amber);font-size:12.5px;margin-bottom:14px">No Outreach Copy generated yet for message #${msgNum} — generate it on the Outreach Copy tab first, or these will send blank.</p>` : ""}
+      ${!msgTemplate ? `<p style="color:var(--amber);font-size:12.5px;margin-bottom:14px">No Outreach Copy generated yet for message #${msgNum} — generate it on the Outreach Copy tab first, or edit copy for all below before sending.</p>` : ""}
       <div class="field">
         <div class="field-row field-row-3" style="margin-bottom:0">
           <select id="batch-filter-vertical"><option value="">All verticals</option>${verticalOptions.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join("")}</select>
@@ -201,7 +215,9 @@ function openOutreachBatchModal(kind, approvedCreators) {
         <span id="batch-eligible-count"></span>
         <button class="btn-link" type="button" id="batch-select-all">Select all</button>
         <button class="btn-link" type="button" id="batch-select-none">Select none</button>
+        <button class="btn-link" type="button" id="batch-edit-template">Edit copy for all</button>
       </div>
+      <div id="batch-template-editor"></div>
       <div class="batch-list" id="batch-list"></div>
       <div class="modal-actions" style="margin-top:16px">
         <button class="btn btn-outline" type="button" id="batch-cancel">Cancel</button>
@@ -232,21 +248,63 @@ function openOutreachBatchModal(kind, approvedCreators) {
     renderList();
   }
 
+  function renderTemplateEditor(open) {
+    const el = document.getElementById("batch-template-editor");
+    if (!open) { el.innerHTML = ""; return; }
+    el.innerHTML = `
+      <div class="batch-template-editor">
+        <label style="font-size:11.5px;font-weight:700;display:block;margin-bottom:6px">Editing message #${msgNum} for everyone below — keep [NAME] wherever each creator's own name should go. Doesn't change what's saved on Outreach Copy, and won't overwrite anyone edited individually.</label>
+        <textarea id="batch-template-input" rows="8">${escHtml(editedTemplate)}</textarea>
+        <div class="modal-actions" style="margin-top:8px">
+          <button class="btn btn-outline" type="button" id="batch-template-cancel">Cancel</button>
+          <button class="btn btn-solid" type="button" id="batch-template-save">Save for all</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("batch-template-cancel").addEventListener("click", () => renderTemplateEditor(false));
+    document.getElementById("batch-template-save").addEventListener("click", () => {
+      editedTemplate = document.getElementById("batch-template-input").value;
+      renderTemplateEditor(false);
+      renderList();
+    });
+  }
+  document.getElementById("batch-edit-template").addEventListener("click", () => renderTemplateEditor(true));
+
   function renderList() {
     const list = document.getElementById("batch-list");
     list.innerHTML = eligible.length ? eligible.map(c => {
-      const personalized = msgTemplate.replace(/\[NAME\]/g, c.name);
-      const preview = personalized
-        ? escHtml(personalized.slice(0, 90)) + (personalized.length > 90 ? "…" : "")
+      const editingThis = editingRowId === c.id;
+      const effectiveMsg = effectiveMessage(c);
+      const preview = effectiveMsg
+        ? escHtml(effectiveMsg.slice(0, 90)) + (effectiveMsg.length > 90 ? "…" : "")
         : `<span class="dim">No message generated</span>`;
       return `
-        <label class="batch-row">
-          <input type="checkbox" class="batch-chk" data-id="${escHtml(c.id)}" ${selected.has(c.id) ? "checked" : ""}>
-          <div class="batch-row-body">
-            <div class="batch-row-head"><strong>${escHtml(c.name)}</strong><span class="dim">@${escHtml(c.ig_handle || c.tt_handle || "—")}</span></div>
-            <div class="batch-row-preview">${preview}</div>
+        <div class="batch-row" data-id="${escHtml(c.id)}">
+          <div class="batch-row-top">
+            <label class="batch-row-main">
+              <input type="checkbox" class="batch-chk" data-id="${escHtml(c.id)}" ${selected.has(c.id) ? "checked" : ""}>
+              <div class="batch-row-body">
+                <div class="batch-row-head">
+                  <strong>${escHtml(c.name)}</strong>
+                  <span class="dim">@${escHtml(c.ig_handle || c.tt_handle || "—")}</span>
+                  ${overrides[c.id] != null ? `<span class="batch-edited-tag">Edited</span>` : ""}
+                </div>
+                <div class="batch-row-preview">${preview}</div>
+              </div>
+            </label>
+            <button class="btn-icon batch-row-edit-btn" type="button" data-id="${escHtml(c.id)}" title="Edit this person's message">&#9998;</button>
           </div>
-        </label>
+          ${editingThis ? `
+            <div class="batch-row-editor">
+              <textarea id="batch-row-input" rows="6">${escHtml(effectiveMsg)}</textarea>
+              <div class="modal-actions" style="margin-top:8px">
+                <button class="btn btn-outline" type="button" id="batch-row-cancel">Cancel</button>
+                ${overrides[c.id] != null ? `<button class="btn btn-outline" type="button" id="batch-row-reset">Reset to template</button>` : ""}
+                <button class="btn btn-solid" type="button" id="batch-row-save">Save</button>
+              </div>
+            </div>
+          ` : ""}
+        </div>
       `;
     }).join("") : `<p class="dim" style="padding:16px 0">No one matches these filters.</p>`;
 
@@ -256,6 +314,26 @@ function openOutreachBatchModal(kind, approvedCreators) {
         updateSendCount();
       });
     });
+    list.querySelectorAll(".batch-row-edit-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        editingRowId = editingRowId === btn.dataset.id ? null : btn.dataset.id;
+        renderList();
+      });
+    });
+    if (editingRowId) {
+      const c = eligible.find(x => x.id === editingRowId);
+      document.getElementById("batch-row-cancel")?.addEventListener("click", () => { editingRowId = null; renderList(); });
+      document.getElementById("batch-row-save")?.addEventListener("click", () => {
+        overrides[c.id] = document.getElementById("batch-row-input").value;
+        editingRowId = null;
+        renderList();
+      });
+      document.getElementById("batch-row-reset")?.addEventListener("click", () => {
+        delete overrides[c.id];
+        editingRowId = null;
+        renderList();
+      });
+    }
     updateSendCount();
   }
 
@@ -300,13 +378,15 @@ function openOutreachBatchModal(kind, approvedCreators) {
     // Connection panel) get an actually-delivered email through the real
     // Gmail backend, proving the full loop end to end — everyone else in
     // the mock dataset stays simulated-only, since their contact info isn't
-    // real. Failures here (backend not running locally) are swallowed —
-    // the simulated marking above already happened either way.
+    // real. Each one uses its effective message — the bulk-edited template,
+    // or that person's own individually-edited override. Failures here
+    // (backend not running locally) are swallowed — the simulated marking
+    // above already happened either way.
     let realSentCount = 0;
     for (const c of batch.filter(c => c.testable)) {
       const to = (tracking[c.id] || {}).email;
       if (!to) continue;
-      const body = msgTemplate ? msgTemplate.replace(/\[NAME\]/g, c.name) : "";
+      const body = effectiveMessage(c);
       try {
         await fetch(`${OUTREACH_API}/api/outreach/send`, {
           method: "POST",
@@ -1014,27 +1094,27 @@ Subject line format: [Gifting Opportunity] [Benefit/Hook] from [BRAND]
 - 1-2 sentence brand intro (only if the creator may not know the brand)
 - 2-3 sentences about the product with key benefits
 - "We've been loving your content and would love to gift you [PRODUCT] to experience and share your take with your audience."
-- Form link CTA (use provided form link or [INSERT FORM LINK])
+- Form link CTA — use the placeholder [INSERT FORM LINK] (this gets swapped for that creator's own single-use link from Form Generator before sending)
 - Email signature: Name / Title / Agency Eight / Location
 
 ## 2. EMAIL FOLLOW-UP #1 (3 days later)
 Subject: Re: [same subject]
-Brief friendly follow-up. Include form link. Email signature.
+Brief friendly follow-up. Include [INSERT FORM LINK]. Email signature.
 
 ## 3. INITIAL DM OUTREACH (no form link)
 Casual, concise. 2-3 sentences about product. End: "Let me know if you're interested and I can share next steps!"
 
 ## 4. DM FOLLOW-UP #1 (3 days after initial DM)
-Brief follow-up. Include form link. Add: "If it's easier, feel free to send me your shipping and email info here."
+Brief follow-up. Include [INSERT FORM LINK]. Add: "If it's easier, feel free to send me your shipping and email info here."
 
 ## 5. IF THEY AGREE
-"Amazing! Please fill out the form below..." Include form link.
+"Amazing! Please fill out the form below..." Include [INSERT FORM LINK].
 
 ## 6. IF THEY DECLINE
 Gracious, warm. Keep door open for future campaigns.
 
 ## 7. IF THEY ASK FOR PAID (NOT OFFERING PAID)
-Acknowledge interest. Explain gifting only. Still offer free gift. Include form link.
+Acknowledge interest. Explain gifting only. Still offer free gift. Include [INSERT FORM LINK].
 
 ## 8. IF THEY ASK FOR PAID (ARE OFFERING PAID)
 "We'd love to explore that! Feel free to reach out to [TEAM EMAIL] and someone from our team will be in touch."
@@ -1058,6 +1138,140 @@ Agency Eight
 Use [PLACEHOLDER] format for any values not found in the provided materials.`;
 
 let copyFiles = [];
+
+// Generated copy used to vanish on every tab switch / reload — nothing
+// persisted it. Cached here (brand + parsed blocks) so renderCopyTab can
+// redraw the last result immediately instead of starting blank.
+const OUTREACH_COPY_CACHE_KEY = "a8i_outreach_copy_cache";
+function loadOutreachCopyCache() { try { return JSON.parse(localStorage.getItem(OUTREACH_COPY_CACHE_KEY) || "null"); } catch { return null; } }
+function saveOutreachCopyCache(c) { localStorage.setItem(OUTREACH_COPY_CACHE_KEY, JSON.stringify(c)); }
+
+// Fixed section titles from OUTREACH_PROMPT's own message structure — used
+// to reconstruct a readable view for copy generated before the cache
+// above existed. That older code already saved body text per message
+// number to `a8i_outreach_messages`, just never the titles/brand, so a
+// generation made before this fix shipped is still recoverable from there.
+const OUTREACH_MESSAGE_TITLES = {
+  1: "INITIAL EMAIL OUTREACH",
+  2: "EMAIL FOLLOW-UP #1",
+  3: "INITIAL DM OUTREACH",
+  4: "DM FOLLOW-UP #1",
+  5: "IF THEY AGREE",
+  6: "IF THEY DECLINE",
+  7: "IF THEY ASK FOR PAID (NOT OFFERING PAID)",
+  8: "IF THEY ASK FOR PAID (ARE OFFERING PAID)",
+  9: "FOLLOW-UP #2 — FORM NOT FILLED",
+  10: "ORDER CONFIRMED + BRIEF",
+  11: "FOLLOW-UP TO POST",
+};
+function recoverOutreachBlocksFromMessages() {
+  let messages;
+  try { messages = JSON.parse(localStorage.getItem("a8i_outreach_messages") || "null"); } catch { messages = null; }
+  if (!messages) return null;
+  const blocks = Object.keys(messages)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map(num => ({ num: String(num), title: OUTREACH_MESSAGE_TITLES[num] || `MESSAGE ${num}`, body: messages[num] }));
+  return blocks.length ? blocks : null;
+}
+
+function parseOutreachBlocks(text) {
+  const blocks = [];
+  text.split(/\n---\n/).forEach(block => {
+    const m = block.trim().match(/^##\s*(\d+)\.\s*(.+)\n([\s\S]*)$/);
+    if (m) blocks.push({ num: m[1], title: m[2].trim(), body: m[3].trim() });
+  });
+  return blocks;
+}
+
+// Same rich-copy pattern as the standalone Outreach Brief Creator tool this
+// was ported from: writes both an HTML version (bold/paragraphs preserved
+// when pasted into an email client) and a plain-text fallback.
+async function copyRich(html, plain) {
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([plain], { type: "text/plain" }),
+      }),
+    ]);
+  } catch {
+    await navigator.clipboard.writeText(plain);
+  }
+}
+
+function blockBodyParagraphsHtml(body) {
+  return body.split(/\n\n+/).map(p =>
+    `<p style="margin:0 0 12px 0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#000">${escHtml(p.trim()).replace(/\n/g, "<br>")}</p>`
+  ).join("");
+}
+function blockToHtml(block) {
+  return `<h3 style="font-family:Arial,sans-serif;font-size:15px;font-weight:700;margin:0 0 8px 0;color:#000">${escHtml(block.num)}. ${escHtml(block.title)}</h3>` +
+    blockBodyParagraphsHtml(block.body);
+}
+function blocksToHtml(blocks, brand) {
+  const title = brand ? `${brand} — Outreach Copy` : "Outreach Copy";
+  let html = `<h1 style="font-family:Arial,sans-serif;font-size:28px;font-weight:700;margin:0 0 8px 0;color:#000">${escHtml(title)}</h1><hr style="border:none;border-top:1px solid #ccc;margin:12px 0 24px 0">`;
+  blocks.forEach((b, i) => {
+    html += blockToHtml(b);
+    if (i < blocks.length - 1) html += `<hr style="border:none;border-top:1px solid #ccc;margin:20px 0">`;
+  });
+  return html;
+}
+function blocksToPlainText(blocks) {
+  return blocks.map(b => `## ${b.num}. ${b.title}\n\n${b.body}`).join("\n\n---\n\n");
+}
+
+// Any "[LIKE THIS]" left in the generated text — [NAME] intentionally
+// (personalized per-creator later), or a real [PLACEHOLDER]/[INSERT ...]
+// Claude couldn't fill in from the materials — gets visually flagged so
+// it's obvious what still needs a human to fill in before sending.
+function highlightFillIns(escapedText) {
+  return escapedText.replace(/\[([^\]]+)\]/g, '<span class="copy-fillin">[$1]</span>');
+}
+function blockBodyDisplayHtml(body) {
+  return `<p style="white-space:pre-wrap;font-size:14px;line-height:1.6;margin:0">${highlightFillIns(escHtml(body))}</p>`;
+}
+
+function renderOutreachOutput(blocks, brand) {
+  const output = document.getElementById("cp-output");
+  if (!output) return;
+  if (!blocks.length) { output.innerHTML = ""; return; }
+
+  output.innerHTML = `
+    <div class="copy-toolbar">
+      <button class="btn btn-outline" type="button" id="cp-copy-all" style="padding:8px 16px;font-size:11px">Copy All</button>
+    </div>
+    ${blocks.map((b, i) => `
+      <div class="form-block copy-block">
+        <div class="copy-block-head">
+          <div class="form-block-label" style="margin-bottom:0">${escHtml(b.num)}. ${escHtml(b.title)}</div>
+          <button class="btn-icon copy-block-btn" type="button" data-i="${i}" title="Copy this message">&#128203;</button>
+        </div>
+        ${blockBodyDisplayHtml(b.body)}
+      </div>
+    `).join("")}
+  `;
+
+  document.getElementById("cp-copy-all").addEventListener("click", (e) => {
+    copyRich(blocksToHtml(blocks, brand), blocksToPlainText(blocks)).then(() => {
+      const btn = e.currentTarget;
+      const orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+  });
+  output.querySelectorAll(".copy-block-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const b = blocks[+btn.dataset.i];
+      copyRich(blockToHtml(b), `## ${b.num}. ${b.title}\n\n${b.body}`).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = "&#10003;";
+        setTimeout(() => { btn.innerHTML = orig; }, 1200);
+      });
+    });
+  });
+}
 
 function defaultNotes() {
   try {
@@ -1088,8 +1302,7 @@ function renderCopyTab() {
           <div class="field"><label>Brand Instagram</label><input type="text" id="cp-ig" placeholder="e.g. @iliabeauty"></div>
           <div class="field"><label>Brand website</label><input type="text" id="cp-site" placeholder="https://..."></div>
         </div>
-        <div class="field-row field-row-3">
-          <div class="field"><label>Form link</label><input type="text" id="cp-form" placeholder="https://form.fillout.com/t/..."></div>
+        <div class="field-row">
           <div class="field"><label>Team email</label><input type="text" id="cp-team-email" placeholder="partnerships@agency-eight.com"></div>
           <div class="field"><label>Location</label><input type="text" id="cp-location" placeholder="e.g. New York, NY"></div>
         </div>
@@ -1136,6 +1349,28 @@ function renderCopyTab() {
   }
 
   document.getElementById("cp-generate").addEventListener("click", generateOutreachCopy);
+
+  // Restore the last generated copy, if any, instead of leaving this blank
+  // every time the tab is re-opened or the page reloads.
+  const cached = loadOutreachCopyCache();
+  if (cached && cached.blocks && cached.blocks.length) {
+    document.getElementById("cp-status").textContent = `Generated for ${cached.brand || "this campaign"}.`;
+    renderOutreachOutput(cached.blocks, cached.brand);
+  } else {
+    // No new-style cache yet, but a generation made before that cache
+    // existed may still have its body text sitting in the older
+    // a8i_outreach_messages key — offer to rebuild a view from that.
+    const recoverable = recoverOutreachBlocksFromMessages();
+    if (recoverable) {
+      document.getElementById("cp-status").innerHTML =
+        `Found a previously generated copy that wasn't cached. <button class="btn-link" type="button" id="cp-recover-btn">Recover it</button>`;
+      document.getElementById("cp-recover-btn").addEventListener("click", () => {
+        saveOutreachCopyCache({ brand: "", blocks: recoverable });
+        document.getElementById("cp-status").textContent = "Generated for this campaign.";
+        renderOutreachOutput(recoverable, "");
+      });
+    }
+  }
 }
 
 async function generateOutreachCopy() {
@@ -1149,7 +1384,6 @@ async function generateOutreachCopy() {
     brand: document.getElementById("cp-brand").value.trim(),
     ig: document.getElementById("cp-ig").value.trim(),
     site: document.getElementById("cp-site").value.trim(),
-    form: document.getElementById("cp-form").value.trim(),
     teamEmail: document.getElementById("cp-team-email").value.trim(),
     managerName: document.getElementById("cp-name").value.trim(),
     managerTitle: document.getElementById("cp-title").value.trim(),
@@ -1161,7 +1395,6 @@ async function generateOutreachCopy() {
   if (fields.brand) lines.push(`Brand name: ${fields.brand}`);
   if (fields.ig) lines.push(`Brand Instagram: ${fields.ig}`);
   if (fields.site) lines.push(`Brand website: ${fields.site}`);
-  if (fields.form) lines.push(`Form link: ${fields.form}`);
   if (fields.teamEmail) lines.push(`Team email for paid inquiries: ${fields.teamEmail}`);
   if (fields.managerName) lines.push(`Manager name: ${fields.managerName}`);
   if (fields.managerTitle) lines.push(`Manager title: ${fields.managerTitle}`);
@@ -1188,26 +1421,17 @@ async function generateOutreachCopy() {
     const text = await callAnthropic(OUTREACH_PROMPT, userMessage, apiKey);
     status.textContent = `Generated for ${fields.brand || "this campaign"}.`;
 
+    const blocks = parseOutreachBlocks(text);
+
     // Saved by message number (not just rendered) so the Tracking tab's
     // per-creator Copy button can pull the exact text for whatever step
     // a creator is on — [NAME] gets swapped for their real name there.
     const messages = {};
-    text.split(/\n---\n/).forEach(block => {
-      const m = block.trim().match(/^##\s*(\d+)\.\s*(.+)\n([\s\S]*)$/);
-      if (m) messages[m[1]] = m[3].trim();
-    });
+    blocks.forEach(b => { messages[b.num] = b.body; });
     localStorage.setItem("a8i_outreach_messages", JSON.stringify(messages));
+    saveOutreachCopyCache({ brand: fields.brand, blocks });
 
-    output.innerHTML = text.split(/\n---\n/).map(block => {
-      const m = block.trim().match(/^##\s*(.+)\n([\s\S]*)$/);
-      if (!m) return "";
-      return `
-        <div class="form-block">
-          <div class="form-block-label">${escHtml(m[1])}</div>
-          <p style="white-space:pre-wrap;font-size:14px;line-height:1.6">${escHtml(m[2].trim())}</p>
-        </div>
-      `;
-    }).join("");
+    renderOutreachOutput(blocks, fields.brand);
   } catch (e) {
     status.textContent = `Error: ${e.message}`;
   } finally {
