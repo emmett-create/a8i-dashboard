@@ -120,6 +120,15 @@ function fmtUpdated(ts) {
 }
 function loadOutreachMessages() { try { return JSON.parse(localStorage.getItem("a8i_outreach_messages") || "{}"); } catch { return {}; } }
 
+// Shared personalization for any generated message — only ever first name
+// for the greeting (not "Hi Kristen Cavallari,"), and the creator's own
+// handle for [HANDLE] in subject lines (IG first, falling back to TikTok).
+function firstNameOf(c) { return (c.name || "").trim().split(/\s+/)[0] || c.name || ""; }
+function handleFor(c) { return c.ig_handle || c.tt_handle || ""; }
+function personalizeMessage(template, c) {
+  return template.replace(/\[NAME\]/g, firstNameOf(c)).replace(/\[HANDLE\]/g, handleFor(c));
+}
+
 const known = loadKnown();
 const decisions = loadDecisions();
 let tracking = loadTracking();
@@ -194,7 +203,7 @@ function openOutreachBatchModal(kind, approvedCreators) {
   let editingRowId = null;
 
   function effectiveMessage(c) {
-    return overrides[c.id] != null ? overrides[c.id] : editedTemplate.replace(/\[NAME\]/g, c.name);
+    return overrides[c.id] != null ? overrides[c.id] : personalizeMessage(editedTemplate, c);
   }
 
   const overlay = document.createElement("div");
@@ -532,7 +541,7 @@ function renderTrackingTab() {
         const id = row.dataset.id;
         const c = known[id];
         const msg = outreachMessages[btn.dataset.msg] || "";
-        const personalized = msg.replace(/\[NAME\]/g, c.name);
+        const personalized = personalizeMessage(msg, c);
         navigator.clipboard.writeText(personalized).then(() => {
           const original = btn.innerHTML;
           btn.innerHTML = "&#10003;";
@@ -829,9 +838,16 @@ const TEST_CREATOR_ID = "test-emmett-dunn";
 // no-op after that first run so it never stomps on edits made later (e.g.
 // if the email gets changed by hand in Tracking).
 function seedTestCreatorIntoOutreachOnce() {
-  if (known[TEST_CREATOR_ID]) return;
+  if (known[TEST_CREATOR_ID]) {
+    // Backfill the handle for anyone who seeded this before @emmett was added.
+    if (!known[TEST_CREATOR_ID].ig_handle) {
+      known[TEST_CREATOR_ID].ig_handle = "emmett";
+      localStorage.setItem(KNOWN_KEY, JSON.stringify(known));
+    }
+    return;
+  }
   known[TEST_CREATOR_ID] = {
-    id: TEST_CREATOR_ID, name: "Emmett Dunn", ig_handle: "", tt_handle: "",
+    id: TEST_CREATOR_ID, name: "Emmett Dunn", ig_handle: "emmett", tt_handle: "",
     client: "", vertical: "", gender: "", location: "",
     ig_followers: null, tt_followers: null,
     testable: true,
@@ -1086,10 +1102,12 @@ Read the provided materials carefully — they contain everything you need: bran
 
 Generate exactly 11 messages in the following order. Separate each message with a line containing only "---" and start each with "## N. MESSAGE NAME" on its own line.
 
+Keep the literal tokens [NAME] and [HANDLE] exactly as written wherever they appear below — they get swapped per-creator later (first name, and their own @handle) and are not something to guess or fill in from the brand materials.
+
 THE 11 MESSAGES:
 
 ## 1. INITIAL EMAIL OUTREACH
-Subject line format: [Gifting Opportunity] [Benefit/Hook] from [BRAND]
+Subject line format: [Gifting Opportunity] [Benefit/Hook] from [BRAND] (@[HANDLE])
 - Greeting: "Hi [NAME],"
 - 1-2 sentence brand intro (only if the creator may not know the brand)
 - 2-3 sentences about the product with key benefits
@@ -1123,7 +1141,7 @@ Acknowledge interest. Explain gifting only. Still offer free gift. Include [INSE
 "Hey [NAME]! We never got your info. If it's easier we can do a manual order, just send over your full name, address, and email address here and I'll get your order placed. LMK if you have any questions!"
 
 ## 10. ORDER CONFIRMED + BRIEF
-Email version (with subject: Your [BRAND] [PRODUCT] Is On Its Way) + shorter DM version.
+Email version (with subject: Your [BRAND] [PRODUCT] Is On Its Way (@[HANDLE])) + shorter DM version.
 Products are on their way. Reference brand deck link: [INSERT BRAND DECK LINK]. Email signature for email version.
 
 ## 11. FOLLOW-UP TO POST
@@ -1233,6 +1251,8 @@ function blockBodyDisplayHtml(body) {
   return `<p style="white-space:pre-wrap;font-size:14px;line-height:1.6;margin:0">${highlightFillIns(escHtml(body))}</p>`;
 }
 
+let copyEditingIndex = null;
+
 function renderOutreachOutput(blocks, brand) {
   const output = document.getElementById("cp-output");
   if (!output) return;
@@ -1246,9 +1266,19 @@ function renderOutreachOutput(blocks, brand) {
       <div class="form-block copy-block">
         <div class="copy-block-head">
           <div class="form-block-label" style="margin-bottom:0">${escHtml(b.num)}. ${escHtml(b.title)}</div>
-          <button class="btn-icon copy-block-btn" type="button" data-i="${i}" title="Copy this message">&#128203;</button>
+          <div class="copy-block-actions">
+            <button class="btn btn-outline copy-block-btn" type="button" data-i="${i}" style="padding:6px 14px;font-size:10.5px">Copy</button>
+            <button class="btn btn-outline copy-block-edit-btn" type="button" data-i="${i}" style="padding:6px 14px;font-size:10.5px">${copyEditingIndex === i ? "Cancel" : "Edit"}</button>
+          </div>
         </div>
-        ${blockBodyDisplayHtml(b.body)}
+        ${copyEditingIndex === i ? `
+          <div class="batch-row-editor">
+            <textarea id="cp-edit-input" rows="8">${escHtml(b.body)}</textarea>
+            <div class="modal-actions" style="margin-top:8px;justify-content:flex-start">
+              <button class="btn btn-solid" type="button" id="cp-edit-save" style="padding:8px 16px;font-size:11px">Save</button>
+            </div>
+          </div>
+        ` : blockBodyDisplayHtml(b.body)}
       </div>
     `).join("")}
   `;
@@ -1261,13 +1291,34 @@ function renderOutreachOutput(blocks, brand) {
       setTimeout(() => { btn.textContent = orig; }, 1500);
     });
   });
+  output.querySelectorAll(".copy-block-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = +btn.dataset.i;
+      copyEditingIndex = copyEditingIndex === i ? null : i;
+      renderOutreachOutput(blocks, brand);
+    });
+  });
+  document.getElementById("cp-edit-save")?.addEventListener("click", () => {
+    const b = blocks[copyEditingIndex];
+    b.body = document.getElementById("cp-edit-input").value;
+    saveOutreachCopyCache({ brand, blocks });
+    // This is the one source of truth Tracking's per-creator copy and the
+    // Initial Outreach / Follow-up #1 batch-send both read from — saving
+    // here means an edit always carries through to outreach automation,
+    // not just this tab's own display.
+    const messages = loadOutreachMessages();
+    messages[b.num] = b.body;
+    localStorage.setItem("a8i_outreach_messages", JSON.stringify(messages));
+    copyEditingIndex = null;
+    renderOutreachOutput(blocks, brand);
+  });
   output.querySelectorAll(".copy-block-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const b = blocks[+btn.dataset.i];
       copyRich(blockToHtml(b), `## ${b.num}. ${b.title}\n\n${b.body}`).then(() => {
-        const orig = btn.innerHTML;
-        btn.innerHTML = "&#10003;";
-        setTimeout(() => { btn.innerHTML = orig; }, 1200);
+        const orig = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = orig; }, 1200);
       });
     });
   });
