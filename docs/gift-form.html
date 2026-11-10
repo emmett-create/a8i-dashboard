@@ -28,7 +28,7 @@ function saveGiftData(d) { localStorage.setItem(GIFT_KEY, JSON.stringify(d)); }
 
 // Mock product catalog — stands in for a real per-client product list until
 // Bundles (Gifting tab) is wired to a live Shopify catalog.
-const PRODUCTS = ["Havana Monaco", "Taormina"];
+const PRODUCTS = ["Havana", "Taormina", "Monaco"];
 
 const root = document.getElementById("form-root");
 const params = new URLSearchParams(location.search);
@@ -77,6 +77,7 @@ if (!token || !entry) {
             ${PRODUCTS.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}
           </select>
         </div>
+        <div class="src-label" style="margin-top:6px">Contact Info</div>
         <div class="field-row" style="grid-template-columns:1fr 1fr">
           <div class="field"><label>Instagram <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-ig" placeholder="@handle"></div>
           <div class="field"><label>TikTok <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-tt" placeholder="@handle"></div>

@@ -404,14 +404,18 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
 .src-table.track-table th:nth-child(1), .src-table.track-table td:nth-child(1) { width: 10%; }
 .src-table.track-table th:nth-child(2), .src-table.track-table td:nth-child(2) { width: 9%; }
 .src-table.track-table th:nth-child(3), .src-table.track-table td:nth-child(3) { width: 9%; }
-.src-table.track-table th:nth-child(4), .src-table.track-table td:nth-child(4) { width: 8%; }
-.src-table.track-table th:nth-child(5), .src-table.track-table td:nth-child(5) { width: 8%; }
-.src-table.track-table th:nth-child(6), .src-table.track-table td:nth-child(6) { width: 13%; }
-.src-table.track-table th:nth-child(7), .src-table.track-table td:nth-child(7) { width: 14%; }
-.src-table.track-table th:nth-child(8), .src-table.track-table td:nth-child(8) { width: 10%; }
-.src-table.track-table th:nth-child(9), .src-table.track-table td:nth-child(9) { width: 10%; }
-.src-table.track-table th:nth-child(10), .src-table.track-table td:nth-child(10) { width: 5%; }
-.src-table.track-table th:nth-child(11), .src-table.track-table td:nth-child(11) { width: 4%; }
+.src-table.track-table th:nth-child(4), .src-table.track-table td:nth-child(4) { width: 7%; }
+.src-table.track-table th:nth-child(5), .src-table.track-table td:nth-child(5) { width: 7%; }
+.src-table.track-table th:nth-child(6), .src-table.track-table td:nth-child(6) { width: 11%; }
+.src-table.track-table th:nth-child(7), .src-table.track-table td:nth-child(7) { width: 12%; }
+.src-table.track-table th:nth-child(8), .src-table.track-table td:nth-child(8) { width: 9%; }
+.src-table.track-table th:nth-child(9), .src-table.track-table td:nth-child(9) { width: 9%; }
+.src-table.track-table th:nth-child(10), .src-table.track-table td:nth-child(10) { width: 9%; }
+.src-table.track-table th:nth-child(11), .src-table.track-table td:nth-child(11) { width: 8%; }
+/* Do Not Contact / Updated At headers are long and these columns are
+   narrow — let the header text wrap to two lines instead of getting
+   clipped by the table's default nowrap+ellipsis. */
+.src-table.track-table th:nth-child(10), .src-table.track-table th:nth-child(11) { white-space: normal; line-height: 1.25; }
 
 .src-table.gift-table th:nth-child(1), .src-table.gift-table td:nth-child(1) { width: 4%; }
 .src-table.gift-table th:nth-child(2), .src-table.gift-table td:nth-child(2) { width: 6%; }
