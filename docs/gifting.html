@@ -28,6 +28,8 @@
   <div class="modal-card">
     <h3>Edit gift application</h3>
     <p id="ga-edit-sub"></p>
+    <div class="field"><label>First name</label><input type="text" id="ga-ef-first" placeholder="First name"></div>
+    <div class="field"><label>Last name</label><input type="text" id="ga-ef-last" placeholder="Last name"></div>
     <div class="field"><label>Email</label><input type="text" id="ga-ef-email" placeholder="creator@email.com"></div>
     <div class="field"><label>Phone</label><input type="text" id="ga-ef-phone" placeholder="(555) 555-5555"></div>
     <div class="field"><label>Shipping address</label><input type="text" id="ga-ef-shipping" placeholder="123 Main St, City, ST 00000"></div>
@@ -56,6 +58,17 @@ function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) |
 function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
 function loadGiftData() { try { return JSON.parse(localStorage.getItem(GIFT_KEY) || "{}"); } catch { return {}; } }
 function saveGiftData(d) { localStorage.setItem(GIFT_KEY, JSON.stringify(d)); }
+
+// Approved creators only have one "name" field from Sourcing — Gift
+// Application needs it split for its First/Last Name columns. A real form
+// submission supplies its own firstName/lastName (typed fresh by the
+// creator, stored on the gift-application record); this split is just the
+// fallback for rows nobody has actually submitted a form for yet.
+function splitName(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return [parts[0] || "", ""];
+  return [parts[0], parts.slice(1).join(" ")];
+}
 
 const STATUS_OPTIONS = ["Not placed", "Order placed", "Delivered"];
 const ORDER_KEY = "a8i_order_placements";
@@ -158,7 +171,8 @@ if (!approvedCreators.length) {
           <tr>
             <th class="no-sort"></th>
             <th class="sort" data-col="submittedAt">Date <span class="sort-icon"></span></th>
-            <th class="sort" data-col="name">Name <span class="sort-icon"></span></th>
+            <th class="sort" data-col="name">First Name <span class="sort-icon"></span></th>
+            <th class="no-sort">Last Name</th>
             <th class="no-sort">Instagram</th>
             <th class="no-sort">TikTok</th>
             <th class="no-sort">Email</th>
@@ -196,7 +210,9 @@ if (!approvedCreators.length) {
       if (clientFilter && c.client !== clientFilter) return false;
       if (statusFilter && g.status !== statusFilter) return false;
       if (productFilter && g.product !== productFilter) return false;
-      if (q && !`${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
+      const [gfbFirst, gfbLast] = splitName(c.name);
+      const gfn = g.firstName || gfbFirst, gln = g.lastName || gfbLast;
+      if (q && !`${c.name} ${gfn} ${gln} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
 
@@ -231,11 +247,15 @@ if (!approvedCreators.length) {
       const alreadySent = !!orders[c.id];
       const igDup = c.ig_handle && igCounts[c.ig_handle.trim().toLowerCase()] > 1;
       const ttDup = c.tt_handle && ttCounts[c.tt_handle.trim().toLowerCase()] > 1;
+      const [fbFirst, fbLast] = splitName(c.name);
+      const firstName = g.firstName || fbFirst;
+      const lastName  = g.lastName  || fbLast;
       return `
         <tr data-id="${escHtml(c.id)}">
           <td><button class="btn-icon ga-edit-btn" type="button" title="Edit email, shipping, product, notes">&#9998;</button></td>
           <td class="dim">${fmtDate(g.submittedAt)}</td>
-          <td class="name-cell">${escHtml(c.name)}</td>
+          <td class="name-cell">${cellOr(firstName)}</td>
+          <td>${cellOr(lastName)}</td>
           <td>${igCell(c, igDup)}</td>
           <td>${ttCell(c, ttDup)}</td>
           <td>${cellOr(g.email)}</td>
@@ -246,7 +266,7 @@ if (!approvedCreators.length) {
           <td><button class="btn-icon ga-send-order-btn" type="button" data-id="${escHtml(c.id)}" title="${alreadySent ? "Already sent — click to resend the latest details" : "Send to Order Placement"}">${alreadySent ? "&#10003;" : "&rarr;"}</button></td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="11" class="dim" style="text-align:center;padding:30px">No applications match these filters.</td></tr>`;
+    }).join("") : `<tr><td colspan="12" class="dim" style="text-align:center;padding:30px">No applications match these filters.</td></tr>`;
 
     document.querySelectorAll(".src-table th.sort .sort-icon").forEach(el => el.textContent = "");
     const activeTh = document.querySelector(`.src-table th[data-col="${sortCol}"] .sort-icon`);
@@ -302,6 +322,9 @@ if (!approvedCreators.length) {
     const g = giftData[id] || {};
     editingId = id;
     document.getElementById("ga-edit-sub").textContent = `${c.name} — @${c.ig_handle || c.tt_handle || "no handle"}`;
+    const [efbFirst, efbLast] = splitName(c.name);
+    document.getElementById("ga-ef-first").value = g.firstName || efbFirst;
+    document.getElementById("ga-ef-last").value  = g.lastName  || efbLast;
     document.getElementById("ga-ef-email").value = g.email || "";
     document.getElementById("ga-ef-phone").value = g.phone || "";
     document.getElementById("ga-ef-shipping").value = g.shipping || "";
@@ -314,6 +337,8 @@ if (!approvedCreators.length) {
   document.getElementById("ga-edit-save").addEventListener("click", () => {
     giftData[editingId] = {
       ...(giftData[editingId] || {}),
+      firstName: document.getElementById("ga-ef-first").value.trim(),
+      lastName: document.getElementById("ga-ef-last").value.trim(),
       email: document.getElementById("ga-ef-email").value.trim(),
       phone: document.getElementById("ga-ef-phone").value.trim(),
       shipping: document.getElementById("ga-ef-shipping").value.trim(),

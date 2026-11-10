@@ -19,6 +19,7 @@
 <section class="section src-section" style="padding-top:60px">
   <div class="src-tabs" id="src-tabs">
     <button class="src-tab active" data-tab="tracking" type="button">Tracking</button>
+    <button class="src-tab" data-tab="formgen" type="button">Form Generator</button>
     <button class="src-tab" data-tab="copy" type="button">Outreach Copy</button>
     <button class="src-tab" data-tab="inbox" type="button">Inbox <span class="mock-flag">Mockup</span></button>
   </div>
@@ -68,11 +69,14 @@ document.getElementById("page-nav").innerHTML = renderPageNav("outreach");
 const KNOWN_KEY = "a8i_known_creators";
 const DECISIONS_KEY = "a8i_creator_decisions";
 const TRACKING_KEY = "a8i_tracking_status";
+const TOKENS_KEY = "a8i_form_tokens";
 
 function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
 function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
 function loadTracking() { try { return JSON.parse(localStorage.getItem(TRACKING_KEY) || "{}"); } catch { return {}; } }
 function saveTracking(t) { localStorage.setItem(TRACKING_KEY, JSON.stringify(t)); }
+function loadTokens() { try { return JSON.parse(localStorage.getItem(TOKENS_KEY) || "{}"); } catch { return {}; } }
+function saveTokens(t) { localStorage.setItem(TOKENS_KEY, JSON.stringify(t)); }
 
 // Outreach steps map directly onto the 11 generated messages (msg: the
 // number Outreach Copy tags each message with) rather than generic stages,
@@ -133,6 +137,7 @@ tabs.forEach(btn => {
 
 function renderActiveTab() {
   if (activeTab === "tracking") renderTrackingTab();
+  else if (activeTab === "formgen") renderFormGenTab();
   else if (activeTab === "inbox") renderInboxTab();
   else renderCopyTab();
 }
@@ -466,6 +471,115 @@ function renderTrackingTab() {
     document.getElementById(id).addEventListener("input", render);
   });
 
+  render();
+}
+
+// ── Tab 2: Form Generator — a single-use gift-application link per
+// creator, standing in for the real Fillout/Zite forms today. Anyone in
+// Outreach can get one; opening it (gift-form.html) shows that creator's
+// own form, and submitting it writes straight into Gifting's Gift
+// Application tab and burns the link so it can't be reused. ────────────────
+function renderFormGenTab() {
+  const approvedCreators = Object.values(known).filter(c => decisions[c.id] === "yes");
+
+  if (!approvedCreators.length) {
+    content.innerHTML = `
+      <div class="empty-state">
+        No creators approved yet.<br>
+        Head to Sourcing and start voting "Y" — approved creators show up here.
+      </div>
+    `;
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="src-label">Form Generator</div>
+    <p class="review-summary">Generate a single-use gift-application link for anyone below — valid for one submission. Whatever they fill out lands directly in Gifting's Gift Application tab.</p>
+    <div class="src-toolbar">
+      <input type="search" id="fg-search" placeholder="Search name or handle…">
+    </div>
+    <p class="src-shown-count" id="fg-shown-count"></p>
+    <div class="src-table-wrap">
+      <table class="src-table formgen-table">
+        <thead>
+          <tr>
+            <th class="no-sort">Name</th>
+            <th class="no-sort">Instagram</th>
+            <th class="no-sort">TikTok</th>
+            <th class="no-sort">Status</th>
+            <th class="no-sort">Form Link</th>
+            <th class="no-sort"></th>
+          </tr>
+        </thead>
+        <tbody id="fg-tbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  function linkFor(token) {
+    return new URL(`gift-form.html?token=${token}`, location.href).href;
+  }
+
+  function render() {
+    const q = document.getElementById("fg-search").value.trim().toLowerCase();
+    const tokens = loadTokens();
+    const rows = approvedCreators.filter(c =>
+      !q || `${c.name} ${c.ig_handle || ""} ${c.tt_handle || ""}`.toLowerCase().includes(q)
+    );
+
+    document.getElementById("fg-shown-count").textContent =
+      `Showing ${rows.length.toLocaleString()} of ${approvedCreators.length.toLocaleString()}`;
+
+    document.getElementById("fg-tbody").innerHTML = rows.length ? rows.map(c => {
+      const t = tokens[c.id];
+      const status = !t ? "Not generated" : (t.usedAt ? "Submitted" : "Link generated");
+      const statusClass = !t ? "stage-red" : (t.usedAt ? "stage-green" : "stage-amber");
+      return `
+        <tr data-id="${escHtml(c.id)}">
+          <td class="name-cell">${escHtml(c.name)}</td>
+          <td>${igCell(c)}</td>
+          <td>${ttCell(c)}</td>
+          <td><span class="status-pip ${statusClass}">${status}</span></td>
+          <td>${t ? `<code class="fg-link">${escHtml(linkFor(t.token))}</code>` : `<span class="dim">—</span>`}</td>
+          <td style="text-align:right;white-space:nowrap">
+            ${t ? `
+              <button class="btn-icon fg-copy-btn" type="button" data-id="${escHtml(c.id)}" title="Copy link">&#128203;</button>
+              <button class="btn-icon fg-regen-btn" type="button" data-id="${escHtml(c.id)}" title="Generate a fresh link (invalidates the old one)">&#8635;</button>
+            ` : `
+              <button class="btn btn-outline fg-gen-btn" type="button" data-id="${escHtml(c.id)}" style="padding:8px 16px;font-size:11px">Generate Form</button>
+            `}
+          </td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="6" class="dim" style="text-align:center;padding:30px">No creators match this search.</td></tr>`;
+
+    document.querySelectorAll(".fg-gen-btn, .fg-regen-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.id;
+        const tk = loadTokens();
+        tk[id] = {
+          token: (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2))),
+          createdAt: Date.now(),
+          usedAt: null,
+        };
+        saveTokens(tk);
+        render();
+      });
+    });
+    document.querySelectorAll(".fg-copy-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const tk = loadTokens()[btn.dataset.id];
+        if (!tk) return;
+        navigator.clipboard.writeText(linkFor(tk.token)).then(() => {
+          const original = btn.innerHTML;
+          btn.innerHTML = "&#10003;";
+          setTimeout(() => { btn.innerHTML = original; }, 1200);
+        });
+      });
+    });
+  }
+
+  document.getElementById("fg-search").addEventListener("input", render);
   render();
 }
 

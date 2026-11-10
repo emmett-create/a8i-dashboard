@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gift Application</title>
+<link rel="icon" href="assets/icon-red.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="form-page-body">
+<div class="form-page-wrap">
+  <div class="form-page-card">
+    <img class="form-page-mark" src="assets/symbol-horizontal-red.png" alt="Agency Eight">
+    <div id="form-root"></div>
+  </div>
+</div>
+<script src="common.js"></script>
+<script>
+const TOKENS_KEY = "a8i_form_tokens";
+const KNOWN_KEY  = "a8i_known_creators";
+const GIFT_KEY   = "a8i_gift_applications";
+
+function loadTokens() { try { return JSON.parse(localStorage.getItem(TOKENS_KEY) || "{}"); } catch { return {}; } }
+function saveTokens(t) { localStorage.setItem(TOKENS_KEY, JSON.stringify(t)); }
+function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
+function loadGiftData() { try { return JSON.parse(localStorage.getItem(GIFT_KEY) || "{}"); } catch { return {}; } }
+function saveGiftData(d) { localStorage.setItem(GIFT_KEY, JSON.stringify(d)); }
+
+// Mock product catalog — stands in for a real per-client product list until
+// Bundles (Gifting tab) is wired to a live Shopify catalog.
+const PRODUCTS = ["Havana Monaco", "Taormina"];
+
+const root = document.getElementById("form-root");
+const params = new URLSearchParams(location.search);
+const token = params.get("token") || "";
+
+const tokens = loadTokens();
+const entry = Object.entries(tokens).find(([, v]) => v.token === token);
+
+if (!token || !entry) {
+  root.innerHTML = `
+    <h1>This link isn't valid</h1>
+    <p class="form-page-sub">It may have already been used, or the link was copied incorrectly. Reach out to whoever sent it for a new one.</p>
+  `;
+} else {
+  const [creatorId, tokenData] = entry;
+
+  if (tokenData.usedAt) {
+    root.innerHTML = `
+      <h1>Already submitted</h1>
+      <p class="form-page-sub">This link has already been used to submit a gift application. If something needs to change, reach out to whoever sent it.</p>
+    `;
+  } else {
+    renderForm();
+  }
+
+  function renderForm() {
+    root.innerHTML = `
+      <h1>Gift Application</h1>
+      <p class="form-page-sub">A few quick details so we can get your gift to the right place.</p>
+      <form id="gift-form">
+        <div class="field-row" style="grid-template-columns:1fr 1fr">
+          <div class="field"><label>First name</label><input type="text" id="gf-first" required></div>
+          <div class="field"><label>Last name</label><input type="text" id="gf-last" required></div>
+        </div>
+        <div class="field"><label>Address line 1</label><input type="text" id="gf-addr1" required></div>
+        <div class="field"><label>Address line 2 <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-addr2"></div>
+        <div class="field-row field-row-3">
+          <div class="field"><label>City</label><input type="text" id="gf-city" required></div>
+          <div class="field"><label>State</label><input type="text" id="gf-state" required></div>
+          <div class="field"><label>Zip</label><input type="text" id="gf-zip" required></div>
+        </div>
+        <div class="field">
+          <label>Product</label>
+          <select id="gf-product" required>
+            <option value="">— select —</option>
+            ${PRODUCTS.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field-row" style="grid-template-columns:1fr 1fr">
+          <div class="field"><label>Instagram <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-ig" placeholder="@handle"></div>
+          <div class="field"><label>TikTok <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-tt" placeholder="@handle"></div>
+        </div>
+        <div class="field"><label>Email</label><input type="email" id="gf-email" required></div>
+        <button class="btn btn-solid" type="submit" style="width:100%;justify-content:center;margin-top:8px">Submit</button>
+      </form>
+    `;
+
+    document.getElementById("gift-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+
+      const firstName = document.getElementById("gf-first").value.trim();
+      const lastName  = document.getElementById("gf-last").value.trim();
+      const addr1     = document.getElementById("gf-addr1").value.trim();
+      const addr2     = document.getElementById("gf-addr2").value.trim();
+      const city      = document.getElementById("gf-city").value.trim();
+      const state     = document.getElementById("gf-state").value.trim();
+      const zip       = document.getElementById("gf-zip").value.trim();
+      const product   = document.getElementById("gf-product").value;
+      const ig        = document.getElementById("gf-ig").value.trim();
+      const tt        = document.getElementById("gf-tt").value.trim();
+      const email     = document.getElementById("gf-email").value.trim();
+
+      if (!firstName || !lastName || !addr1 || !city || !state || !zip || !product || !email) return;
+
+      const shipping = [addr1, addr2, [city, state].filter(Boolean).join(", "), zip].filter(Boolean).join(", ");
+
+      const giftData = loadGiftData();
+      giftData[creatorId] = {
+        ...(giftData[creatorId] || {}),
+        firstName, lastName, shipping, product, email,
+        ig_submitted: ig || null,
+        tt_submitted: tt || null,
+        status: (giftData[creatorId] || {}).status || "Not placed",
+        submittedAt: Date.now(),
+      };
+      saveGiftData(giftData);
+
+      const tk = loadTokens();
+      tk[creatorId] = { ...tk[creatorId], usedAt: Date.now() };
+      saveTokens(tk);
+
+      root.innerHTML = `
+        <h1>You're all set</h1>
+        <p class="form-page-sub">Thanks${firstName ? ", " + escHtml(firstName) : ""} — we've got your application and will be in touch about next steps.</p>
+      `;
+    });
+  }
+}
+</script>
+</body>
+</html>

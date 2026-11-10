@@ -415,15 +415,23 @@ table.src-table { border-collapse: collapse; width: 100%; table-layout: fixed; f
 
 .src-table.gift-table th:nth-child(1), .src-table.gift-table td:nth-child(1) { width: 4%; }
 .src-table.gift-table th:nth-child(2), .src-table.gift-table td:nth-child(2) { width: 6%; }
-.src-table.gift-table th:nth-child(3), .src-table.gift-table td:nth-child(3) { width: 11%; }
-.src-table.gift-table th:nth-child(4), .src-table.gift-table td:nth-child(4) { width: 10%; }
-.src-table.gift-table th:nth-child(5), .src-table.gift-table td:nth-child(5) { width: 10%; }
+.src-table.gift-table th:nth-child(3), .src-table.gift-table td:nth-child(3) { width: 8%; }
+.src-table.gift-table th:nth-child(4), .src-table.gift-table td:nth-child(4) { width: 8%; }
+.src-table.gift-table th:nth-child(5), .src-table.gift-table td:nth-child(5) { width: 9%; }
 .src-table.gift-table th:nth-child(6), .src-table.gift-table td:nth-child(6) { width: 9%; }
 .src-table.gift-table th:nth-child(7), .src-table.gift-table td:nth-child(7) { width: 8%; }
-.src-table.gift-table th:nth-child(8), .src-table.gift-table td:nth-child(8) { width: 12%; }
-.src-table.gift-table th:nth-child(9), .src-table.gift-table td:nth-child(9) { width: 9%; }
-.src-table.gift-table th:nth-child(10), .src-table.gift-table td:nth-child(10) { width: 10%; }
-.src-table.gift-table th:nth-child(11), .src-table.gift-table td:nth-child(11) { width: 11%; }
+.src-table.gift-table th:nth-child(8), .src-table.gift-table td:nth-child(8) { width: 7%; }
+.src-table.gift-table th:nth-child(9), .src-table.gift-table td:nth-child(9) { width: 12%; }
+.src-table.gift-table th:nth-child(10), .src-table.gift-table td:nth-child(10) { width: 8%; }
+.src-table.gift-table th:nth-child(11), .src-table.gift-table td:nth-child(11) { width: 9%; }
+.src-table.gift-table th:nth-child(12), .src-table.gift-table td:nth-child(12) { width: 11%; }
+
+.src-table.formgen-table th:nth-child(1), .src-table.formgen-table td:nth-child(1) { width: 15%; }
+.src-table.formgen-table th:nth-child(2), .src-table.formgen-table td:nth-child(2) { width: 13%; }
+.src-table.formgen-table th:nth-child(3), .src-table.formgen-table td:nth-child(3) { width: 13%; }
+.src-table.formgen-table th:nth-child(4), .src-table.formgen-table td:nth-child(4) { width: 13%; }
+.src-table.formgen-table th:nth-child(5), .src-table.formgen-table td:nth-child(5) { width: 32%; }
+.src-table.formgen-table th:nth-child(6), .src-table.formgen-table td:nth-child(6) { width: 14%; }
 
 .src-table.order-table th:nth-child(1), .src-table.order-table td:nth-child(1) { width: 7%; }
 .src-table.order-table th:nth-child(2), .src-table.order-table td:nth-child(2) { width: 10%; }
@@ -539,6 +547,23 @@ table.weekly-table { border-collapse: collapse; width: 100%; table-layout: fixed
 .status-select.stage-muted { background-color: rgba(0,0,0,.04); color: var(--dim); border-color: var(--line); }
 .outreach-step-cell { display: flex; align-items: center; gap: 5px; }
 .outreach-step-cell .status-select { flex: 1 1 auto; min-width: 0; }
+
+/* Form Generator — status pip (same red/amber/green language as
+   status-select, but for a plain read-only label, not a dropdown). */
+.status-pip { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+.status-pip.stage-red { background: rgba(202,1,0,.08); color: var(--red); }
+.status-pip.stage-amber { background: rgba(184,105,10,.1); color: var(--amber); }
+.status-pip.stage-green { background: rgba(26,122,26,.1); color: var(--green); }
+.fg-link { font-size: 11px; color: var(--dim); }
+
+/* ── Gift Application form (creator-facing, single-use link) ─────────────── */
+.form-page-body { background: var(--ivory); }
+.form-page-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+.form-page-card { background: var(--white); max-width: 480px; width: 100%; padding: 44px 36px; }
+.form-page-mark { height: 28px; margin-bottom: 28px; }
+.form-page-card h1 { font-size: 24px; font-weight: 700; margin-bottom: 10px; }
+.form-page-sub { font-size: 13.5px; color: var(--dim); line-height: 1.5; margin-bottom: 26px; }
+.form-page-optional { font-weight: 400; text-transform: none; font-size: 10px; }
 
 .email-input {
   font-family: var(--display); font-size: 12px; color: var(--black);
