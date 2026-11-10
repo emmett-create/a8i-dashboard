@@ -283,7 +283,7 @@ function openOutreachBatchModal(kind, approvedCreators) {
   document.getElementById("batch-cancel").addEventListener("click", close);
   overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
 
-  document.getElementById("batch-confirm").addEventListener("click", () => {
+  document.getElementById("batch-confirm").addEventListener("click", async () => {
     const batch = eligible.filter(c => selected.has(c.id));
     if (!batch.length) { close(); return; }
     const prev = {};
@@ -296,8 +296,30 @@ function openOutreachBatchModal(kind, approvedCreators) {
     saveTracking(tracking);
     lastBatch = { kind, ids: batch.map(c => c.id), prev };
 
+    // Creators flagged `testable` (seeded from the Inbox tab's Live Test
+    // Connection panel) get an actually-delivered email through the real
+    // Gmail backend, proving the full loop end to end — everyone else in
+    // the mock dataset stays simulated-only, since their contact info isn't
+    // real. Failures here (backend not running locally) are swallowed —
+    // the simulated marking above already happened either way.
+    let realSentCount = 0;
+    for (const c of batch.filter(c => c.testable)) {
+      const to = (tracking[c.id] || {}).email;
+      if (!to) continue;
+      const body = msgTemplate ? msgTemplate.replace(/\[NAME\]/g, c.name) : "";
+      try {
+        await fetch(`${OUTREACH_API}/api/outreach/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to, body }),
+        });
+        realSentCount++;
+      } catch {}
+    }
+
     close();
-    showUndoBanner(`${batch.length} email${batch.length === 1 ? "" : "s"} "sent" (simulated) — marked "${newStage}".`);
+    const realNote = realSentCount ? ` (${realSentCount} actually delivered via Gmail — check the Inbox tab)` : "";
+    showUndoBanner(`${batch.length} email${batch.length === 1 ? "" : "s"} "sent"${realNote} — marked "${newStage}".`);
     renderTrackingTab();
   });
 }
@@ -712,6 +734,38 @@ let inboxOpenId = null;
 // already proven standalone in the a8i-email-test repo.
 const OUTREACH_API = "http://localhost:8910";
 
+// The real test "creator" inbox the backend sends to/reads from (see
+// app.py's TEST_CREATOR_EMAIL) — kept here too so the seeded Outreach entry
+// below and the Live Test Connection panel always agree on the address.
+const TEST_CREATOR_EMAIL = "emmettdunn4@gmail.com";
+const TEST_CREATOR_ID = "test-emmett-dunn";
+
+// Puts a real, named test creator into Outreach's Tracking list (not just
+// the Inbox tab's isolated thread) so he shows up everywhere an approved
+// creator normally would — Tracking, Form Generator, Gift Application —
+// flagged `testable` so Initial Outreach / Follow-up #1 actually deliver to
+// this real inbox through the backend above instead of only simulating.
+// Seeded once automatically (below), not behind a button — a one-time
+// no-op after that first run so it never stomps on edits made later (e.g.
+// if the email gets changed by hand in Tracking).
+function seedTestCreatorIntoOutreachOnce() {
+  if (known[TEST_CREATOR_ID]) return;
+  known[TEST_CREATOR_ID] = {
+    id: TEST_CREATOR_ID, name: "Emmett Dunn", ig_handle: "", tt_handle: "",
+    client: "", vertical: "", gender: "", location: "",
+    ig_followers: null, tt_followers: null,
+    testable: true,
+  };
+  localStorage.setItem(KNOWN_KEY, JSON.stringify(known));
+
+  decisions[TEST_CREATOR_ID] = "yes";
+  localStorage.setItem(DECISIONS_KEY, JSON.stringify(decisions));
+
+  tracking[TEST_CREATOR_ID] = { ...(tracking[TEST_CREATOR_ID] || {}), email: TEST_CREATOR_EMAIL };
+  saveTracking(tracking);
+}
+seedTestCreatorIntoOutreachOnce();
+
 async function renderLiveTestPanel() {
   const el = document.getElementById("live-test-panel");
   if (!el) return;
@@ -738,6 +792,7 @@ async function renderLiveTestPanel() {
       <button class="btn btn-outline" type="button" id="live-refresh">Check for replies</button>
     </div>
     <div id="live-thread"><p class="dim">Connected. Send a test outreach email, reply to it from the inbox, then check for replies.</p></div>
+    <p class="dim" style="font-size:11.5px;margin-top:10px">"Emmett Dunn" (${escHtml(TEST_CREATOR_EMAIL)}) is already in Outreach's Tracking list for this — generate his form on Form Generator, or run Initial Outreach / Follow-up #1 on Tracking and it'll actually deliver to this real inbox.</p>
   `;
   document.getElementById("live-send").addEventListener("click", async () => {
     document.getElementById("live-thread").innerHTML = `<p class="dim">Sending…</p>`;

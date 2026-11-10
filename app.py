@@ -16,6 +16,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -424,18 +425,26 @@ TEST_CREATOR_EMAIL = "emmettdunn4@gmail.com"
 
 
 @app.post("/api/outreach/send")
-def outreach_send():
-    """Sends a real test outreach email to a separate test "creator" inbox."""
+def outreach_send(payload: Optional[dict] = None):
+    """Sends a real outreach email. With no body (the Inbox tab's own "Send
+    test outreach" button), sends the original static test message to
+    TEST_CREATOR_EMAIL — unchanged. With {"to", "body"} in the body, sends
+    that instead — used by Outreach's Initial Outreach / Follow-up #1
+    batch-send flow to actually deliver mail (via Gmail, same subject so it
+    still shows up in /api/outreach/replies) to creators flagged `testable`
+    in the mockup data, rather than only simulating a send."""
     service = _gmail_service()
-    msg = email.mime.text.MIMEText(
+    to = (payload or {}).get("to") or TEST_CREATOR_EMAIL
+    body_text = (payload or {}).get("body") or (
         "Hi! This is a test outreach email from the A8i prototype.\n\n"
         "Reply to this email to test the reply-detection flow.\n\n- A8i test"
     )
-    msg["to"] = TEST_CREATOR_EMAIL
+    msg = email.mime.text.MIMEText(body_text)
+    msg["to"] = to
     msg["subject"] = TEST_SUBJECT
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
-    return {"sent": True, "to": TEST_CREATOR_EMAIL, "thread_id": sent["threadId"]}
+    return {"sent": True, "to": to, "thread_id": sent["threadId"]}
 
 
 @app.get("/api/outreach/replies")
