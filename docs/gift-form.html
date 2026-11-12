@@ -20,6 +20,12 @@ const TOKENS_KEY = "a8i_form_tokens";
 const KNOWN_KEY  = "a8i_known_creators";
 const GIFT_KEY   = "a8i_gift_applications";
 
+// How long after first submission a creator can come back through the same
+// link and correct their response, before it locks for good. Mirrors what
+// Seva does (per the 2026-11-10 call) rather than inventing our own number.
+const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SUPPORT_EMAIL = "partnerships@agency-eight.com";
+
 function loadTokens() { try { return JSON.parse(localStorage.getItem(TOKENS_KEY) || "{}"); } catch { return {}; } }
 function saveTokens(t) { localStorage.setItem(TOKENS_KEY, JSON.stringify(t)); }
 function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
@@ -37,55 +43,85 @@ const token = params.get("token") || "";
 const tokens = loadTokens();
 const entry = Object.entries(tokens).find(([, v]) => v.token === token);
 
+const contactNote = `<p class="form-page-sub" style="margin-top:18px;font-size:12.5px">Need to change something or think this reached you by mistake? Email <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>.</p>`;
+
 if (!token || !entry) {
   root.innerHTML = `
     <h1>This link isn't valid</h1>
     <p class="form-page-sub">It may have already been used, or the link was copied incorrectly. Reach out to whoever sent it for a new one.</p>
+    ${contactNote}
   `;
 } else {
   const [creatorId, tokenData] = entry;
+  const creator = loadKnown()[creatorId] || {};
+  const withinEditWindow = tokenData.firstSubmittedAt && (Date.now() - tokenData.firstSubmittedAt < EDIT_WINDOW_MS);
 
-  if (tokenData.usedAt) {
+  if (tokenData.usedAt && !withinEditWindow) {
     root.innerHTML = `
       <h1>Already submitted</h1>
-      <p class="form-page-sub">This link has already been used to submit a gift application. If something needs to change, reach out to whoever sent it.</p>
+      <p class="form-page-sub">This link has already been used to submit a gift application, and the 24-hour window to make changes has passed.</p>
+      ${contactNote}
     `;
   } else {
     renderForm();
   }
 
+  // Shown once at the top of the form itself — naming who the link was
+  // actually generated for is the deterrent against forwarding/leaking it
+  // (per the 2026-11-10 call: "if someone leaks it, they're screwed because
+  // then they can't fill it out" — this makes that obvious up front instead
+  // of only after the fact).
+  function identityBanner() {
+    const handle = creator.ig_handle ? "@" + creator.ig_handle : (creator.tt_handle ? "@" + creator.tt_handle : "");
+    if (!creator.name) return "";
+    return `
+      <p class="form-page-sub" style="margin-bottom:18px">
+        This personalized link was generated for <strong>${escHtml(creator.name)}</strong>${handle ? " (" + escHtml(handle) + ")" : ""}.
+        If that's not you, please don't fill this out — ${handle ? "the handles below need to match, and " : ""}reach out to whoever sent it instead.
+      </p>
+    `;
+  }
+
   function renderForm() {
+    const editing = Boolean(tokenData.usedAt && withinEditWindow);
+    const existing = editing ? (loadGiftData()[creatorId] || {}) : {};
+    const [exCity, exState] = (existing.shipping || "").split(", ").slice(1, 3).map(s => (s || "").trim());
+
     root.innerHTML = `
-      <h1>Gift Application</h1>
-      <p class="form-page-sub">A few quick details so we can get your gift to the right place.</p>
+      <h1>${editing ? "Update Your Gift Application" : "Gift Application"}</h1>
+      ${editing ? `<p class="form-page-sub">You submitted this already — you can still fix anything wrong below until ${new Date(tokenData.firstSubmittedAt + EDIT_WINDOW_MS).toLocaleString()}.</p>` : `<p class="form-page-sub">A few quick details so we can get your gift to the right place.</p>`}
+      ${identityBanner()}
       <form id="gift-form">
         <div class="field-row" style="grid-template-columns:1fr 1fr">
-          <div class="field"><label>First name</label><input type="text" id="gf-first" required></div>
-          <div class="field"><label>Last name</label><input type="text" id="gf-last" required></div>
+          <div class="field"><label>First name</label><input type="text" id="gf-first" required value="${escHtml(existing.firstName || "")}"></div>
+          <div class="field"><label>Last name</label><input type="text" id="gf-last" required value="${escHtml(existing.lastName || "")}"></div>
         </div>
-        <div class="field"><label>Address line 1</label><input type="text" id="gf-addr1" required></div>
+        <div class="field"><label>Address line 1</label><input type="text" id="gf-addr1" required value="${escHtml((existing.shipping || "").split(", ")[0] || "")}"></div>
         <div class="field"><label>Address line 2 <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-addr2"></div>
         <div class="field-row field-row-3">
-          <div class="field"><label>City</label><input type="text" id="gf-city" required></div>
-          <div class="field"><label>State</label><input type="text" id="gf-state" required></div>
-          <div class="field"><label>Zip</label><input type="text" id="gf-zip" required></div>
+          <div class="field"><label>City</label><input type="text" id="gf-city" required value="${escHtml(exCity || "")}"></div>
+          <div class="field"><label>State</label><input type="text" id="gf-state" required value="${escHtml(exState || "")}"></div>
+          <div class="field"><label>Zip</label><input type="text" id="gf-zip" required value="${escHtml((existing.shipping || "").split(", ").slice(-1)[0] || "")}"></div>
         </div>
         <div class="field">
           <label>Product</label>
           <select id="gf-product" required>
             <option value="">— select —</option>
-            ${PRODUCTS.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}
+            ${PRODUCTS.map(p => `<option value="${escHtml(p)}" ${existing.product === p ? "selected" : ""}>${escHtml(p)}</option>`).join("")}
           </select>
         </div>
         <div class="src-label" style="margin-top:6px">Contact Info</div>
         <div class="field-row" style="grid-template-columns:1fr 1fr">
-          <div class="field"><label>Instagram <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-ig" placeholder="@handle"></div>
-          <div class="field"><label>TikTok <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-tt" placeholder="@handle"></div>
+          <div class="field"><label>Instagram <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-ig" placeholder="@handle" value="${escHtml(existing.ig_submitted || "")}"></div>
+          <div class="field"><label>TikTok <span class="form-page-optional">(optional)</span></label><input type="text" id="gf-tt" placeholder="@handle" value="${escHtml(existing.tt_submitted || "")}"></div>
         </div>
-        <div class="field"><label>Email</label><input type="email" id="gf-email" required></div>
-        <button class="btn btn-solid" type="submit" style="width:100%;justify-content:center;margin-top:8px">Submit</button>
+        <div class="field"><label>Email</label><input type="email" id="gf-email" required value="${escHtml(existing.email || "")}"></div>
+        <p class="form-page-sub" id="gf-handle-warning" style="display:none;color:var(--amber, #a86a00);font-size:12px;margin-top:-4px"></p>
+        <button class="btn btn-solid" type="submit" style="width:100%;justify-content:center;margin-top:8px">${editing ? "Save Changes" : "Submit"}</button>
       </form>
     `;
+
+    function normalizeHandle(h) { return (h || "").trim().toLowerCase().replace(/^@/, ""); }
 
     document.getElementById("gift-form").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -104,6 +140,18 @@ if (!token || !entry) {
 
       if (!firstName || !lastName || !addr1 || !city || !state || !zip || !product || !email) return;
 
+      // Soft leak check, not a hard block: if we know this link's handle and
+      // what was typed in clearly doesn't match, warn instead of silently
+      // accepting — a real mismatch here is the actual "leaked to someone
+      // else" case the 2026-11-10 call wanted the form to catch.
+      const knownHandle = normalizeHandle(creator.ig_handle) || normalizeHandle(creator.tt_handle);
+      const typedHandle = normalizeHandle(ig) || normalizeHandle(tt);
+      const warningEl = document.getElementById("gf-handle-warning");
+      if (knownHandle && typedHandle && knownHandle !== typedHandle) {
+        warningEl.textContent = `Heads up — this link was generated for @${knownHandle}, but you entered @${typedHandle}. Double-check before submitting, or reach out to ${SUPPORT_EMAIL} if something's off.`;
+        warningEl.style.display = "block";
+      }
+
       const shipping = [addr1, addr2, [city, state].filter(Boolean).join(", "), zip].filter(Boolean).join(", ");
 
       const giftData = loadGiftData();
@@ -118,12 +166,21 @@ if (!token || !entry) {
       saveGiftData(giftData);
 
       const tk = loadTokens();
-      tk[creatorId] = { ...tk[creatorId], usedAt: Date.now() };
+      const now = Date.now();
+      tk[creatorId] = {
+        ...tk[creatorId],
+        usedAt: now,
+        firstSubmittedAt: tk[creatorId].firstSubmittedAt || now,
+      };
       saveTokens(tk);
+
+      const editableUntil = new Date((tk[creatorId].firstSubmittedAt) + EDIT_WINDOW_MS).toLocaleString();
 
       root.innerHTML = `
         <h1>You're all set</h1>
         <p class="form-page-sub">Thanks${firstName ? ", " + escHtml(firstName) : ""} — we've got your application and will be in touch about next steps.</p>
+        <p class="form-page-sub">Spot something wrong? Come back to this same link to fix it until <strong>${editableUntil}</strong>.</p>
+        ${contactNote}
       `;
     });
   }

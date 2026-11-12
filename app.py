@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # local-dev only, see a8i-email-test
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from google.oauth2 import service_account
@@ -398,7 +398,17 @@ def _classify(reply_text: str) -> str:
 
 @app.get("/api/outreach/status")
 def outreach_status():
-    return {"connected": TOKEN_FILE.exists()}
+    """Actually verifies the token still works, not just that the file
+    exists — Testing-mode refresh tokens expire every 7 days, so a stale
+    token.json otherwise looks "connected" right up until a real send/read
+    call 500s."""
+    if not TOKEN_FILE.exists():
+        return {"connected": False}
+    try:
+        _gmail_service().users().getProfile(userId="me").execute()
+        return {"connected": True}
+    except Exception:
+        return {"connected": False, "expired": True}
 
 
 @app.get("/api/outreach/connect")
@@ -423,18 +433,63 @@ def outreach_oauth_callback(request: Request):
 # from a real incoming reply. A different recipient account fixes that.
 TEST_CREATOR_EMAIL = "emmettdunn4@gmail.com"
 
+# Real test-creator inboxes to send to / read replies from — lets the reply
+# classifier get exercised against a real variety of reply types (agree,
+# decline, asks for paid, ambiguous, etc.) instead of just one thread.
+# File-backed (not just in-memory) so added test inboxes survive a restart.
+TEST_CREATORS_FILE = BASE_DIR / "test_creators.json"
+
+
+def _load_test_creators() -> list:
+    if TEST_CREATORS_FILE.exists():
+        return json.loads(TEST_CREATORS_FILE.read_text())
+    seeded = [{"name": "Emmett Dunn", "email": TEST_CREATOR_EMAIL}]
+    TEST_CREATORS_FILE.write_text(json.dumps(seeded, indent=2))
+    return seeded
+
+
+def _save_test_creators(creators: list):
+    TEST_CREATORS_FILE.write_text(json.dumps(creators, indent=2))
+
+
+@app.get("/api/outreach/test_creators")
+def list_test_creators():
+    return {"creators": _load_test_creators()}
+
+
+@app.post("/api/outreach/test_creators")
+def add_test_creator(payload: dict):
+    email_addr = (payload.get("email") or "").strip().lower()
+    if not email_addr:
+        raise HTTPException(400, "email is required")
+    name = (payload.get("name") or "").strip() or email_addr
+    creators = _load_test_creators()
+    if any(c["email"] == email_addr for c in creators):
+        raise HTTPException(409, "already added")
+    creators.append({"name": name, "email": email_addr})
+    _save_test_creators(creators)
+    return {"creators": creators}
+
+
+@app.delete("/api/outreach/test_creators/{email_addr}")
+def remove_test_creator(email_addr: str):
+    creators = [c for c in _load_test_creators() if c["email"] != email_addr.strip().lower()]
+    _save_test_creators(creators)
+    return {"creators": creators}
+
 
 @app.post("/api/outreach/send")
 def outreach_send(payload: Optional[dict] = None):
     """Sends a real outreach email. With no body (the Inbox tab's own "Send
-    test outreach" button), sends the original static test message to
-    TEST_CREATOR_EMAIL — unchanged. With {"to", "body"} in the body, sends
-    that instead — used by Outreach's Initial Outreach / Follow-up #1
-    batch-send flow to actually deliver mail (via Gmail, same subject so it
-    still shows up in /api/outreach/replies) to creators flagged `testable`
-    in the mockup data, rather than only simulating a send."""
+    test outreach" button), sends the original static test message to the
+    first saved test creator. With {"to", "body"} in the body, sends that
+    instead — used by Outreach's Initial Outreach / Follow-up #1 batch-send
+    flow to actually deliver mail (via Gmail, same subject so it still shows
+    up in /api/outreach/replies) to creators flagged `testable` in the
+    mockup data, rather than only simulating a send."""
     service = _gmail_service()
-    to = (payload or {}).get("to") or TEST_CREATOR_EMAIL
+    default_to = (_load_test_creators() or [{}])[0].get("email", TEST_CREATOR_EMAIL)
+    to = (payload or {}).get("to") or default_to
     body_text = (payload or {}).get("body") or (
         "Hi! This is a test outreach email from the A8i prototype.\n\n"
         "Reply to this email to test the reply-detection flow.\n\n- A8i test"
@@ -447,23 +502,46 @@ def outreach_send(payload: Optional[dict] = None):
     return {"sent": True, "to": to, "thread_id": sent["threadId"]}
 
 
+EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def _extract_email_addr(header_value: Optional[str]) -> str:
+    if not header_value:
+        return ""
+    m = EMAIL_RE.search(header_value)
+    return (m.group(0) if m else header_value).lower()
+
+
+def _gmail_thread_url(thread_id: str) -> str:
+    # Opens in whichever Google account is logged into the browser tab —
+    # correct for us (a8itesting@gmail.com owns this mailbox), and exactly
+    # the "click through to the real Gmail thread" behavior asked for, since
+    # a8i organizes status itself and never needs to touch labels/threads
+    # inside Gmail to do it.
+    return f"https://mail.google.com/mail/u/0/#all/{thread_id}"
+
+
 @app.get("/api/outreach/replies")
 def outreach_replies():
     """Real inbox data for the Outreach page's Inbox tab, replacing the
-    seeded localStorage mock. Each reply gets classified via Claude if
-    ANTHROPIC_API_KEY is set."""
+    seeded localStorage mock. Grouped into one thread per real test creator
+    (not a flat list) so testing several real inboxes at once stays
+    readable, and each thread links straight through to the real Gmail
+    thread. Each reply gets classified via Claude if ANTHROPIC_API_KEY is
+    set."""
     service = _gmail_service()
     results = service.users().messages().list(
         userId="me", q=f'subject:"{TEST_SUBJECT}"'
     ).execute()
     message_refs = results.get("messages", [])
 
-    out = []
+    threads: dict = {}
     for ref in message_refs:
         full = service.users().messages().get(userId="me", id=ref["id"], format="full").execute()
         headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
         body = _extract_body(full["payload"]).strip()
         is_outgoing = "SENT" in (full.get("labelIds") or [])
+        counterpart = _extract_email_addr(headers.get("To") if is_outgoing else headers.get("From"))
         entry = {
             "id": ref["id"],
             "from": headers.get("From"),
@@ -471,15 +549,29 @@ def outreach_replies():
             "snippet": full.get("snippet"),
             "body": body,
             "is_outgoing": is_outgoing,
+            "internal_date": int(full.get("internalDate") or 0),
         }
-        # Only classify genuine replies — classifying our own sent message
-        # against Agree/Decline/Asks-For-Paid isn't a meaningful test, and
-        # that's exactly the imprecision flagged after the standalone test.
         if ANTHROPIC_API_KEY and body and not is_outgoing:
             entry["classification"] = _classify(body)
-        out.append(entry)
 
-    return {"count": len(out), "messages": out}
+        thread_id = full["threadId"]
+        t = threads.setdefault(thread_id, {
+            "thread_id": thread_id,
+            "gmail_url": _gmail_thread_url(thread_id),
+            "counterpart": None,
+            "messages": [],
+        })
+        if counterpart and not t["counterpart"]:
+            t["counterpart"] = counterpart
+        t["messages"].append(entry)
+
+    thread_list = list(threads.values())
+    for t in thread_list:
+        t["messages"].sort(key=lambda m: m["internal_date"])
+    thread_list.sort(key=lambda t: t["messages"][-1]["internal_date"] if t["messages"] else 0, reverse=True)
+
+    total = sum(len(t["messages"]) for t in thread_list)
+    return {"count": total, "threads": thread_list}
 
 
 @app.get("/")

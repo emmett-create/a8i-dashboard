@@ -70,6 +70,8 @@ const KNOWN_KEY = "a8i_known_creators";
 const DECISIONS_KEY = "a8i_creator_decisions";
 const TRACKING_KEY = "a8i_tracking_status";
 const TOKENS_KEY = "a8i_form_tokens";
+// Mirrors gift-form.html's EDIT_WINDOW_MS — keep these in sync.
+const FORM_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function loadKnown() { try { return JSON.parse(localStorage.getItem(KNOWN_KEY) || "{}"); } catch { return {}; } }
 function loadDecisions() { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || "{}"); } catch { return {}; } }
@@ -454,6 +456,7 @@ function renderTrackingTab() {
       <select id="track-filter-client"><option value="">All clients</option></select>
       <button class="btn btn-outline" type="button" id="btn-initial-outreach" style="padding:8px 16px;font-size:11px;margin-left:auto">Initial Outreach</button>
       <button class="btn btn-outline" type="button" id="btn-followup-outreach" style="padding:8px 16px;font-size:11px">Follow-up &#35;1</button>
+      <button class="btn btn-outline" type="button" id="btn-export-mailmerge-csv" style="padding:8px 16px;font-size:11px" title="Name, email, handles, and each creator's Form Generator link — ready for a Mailmeteor mail merge">Export CSV</button>
     </div>
     <p class="src-shown-count" id="shown-count"></p>
     <div class="src-table-wrap">
@@ -485,6 +488,36 @@ function renderTrackingTab() {
 
   document.getElementById("btn-initial-outreach").addEventListener("click", () => openOutreachBatchModal("initial", approvedCreators));
   document.getElementById("btn-followup-outreach").addEventListener("click", () => openOutreachBatchModal("followup", approvedCreators));
+
+  function csvCell(v) {
+    const s = (v == null ? "" : String(v));
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+  document.getElementById("btn-export-mailmerge-csv").addEventListener("click", () => {
+    const formTokens = loadTokens();
+    const header = ["Name", "Email", "Instagram", "TikTok", "Form Link", "Outreach Status"];
+    const lines = [header.map(csvCell).join(",")];
+    approvedCreators.forEach(c => {
+      const t = tracking[c.id] || {};
+      const tk = formTokens[c.id];
+      const formLink = tk ? new URL(`gift-form.html?token=${tk.token}`, location.href).href : "";
+      lines.push([
+        c.name,
+        t.email || "",
+        c.ig_handle ? "@" + c.ig_handle : "",
+        c.tt_handle ? "@" + c.tt_handle : "",
+        formLink,
+        t.outreach || "",
+      ].map(csvCell).join(","));
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `a8i-outreach-mailmerge-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
 
   let sortCol = "name", sortDir = "asc";
 
@@ -622,6 +655,7 @@ function renderFormGenTab() {
     <p class="review-summary">Generate a single-use gift-application link for anyone below — valid for one submission. Whatever they fill out lands directly in Gifting's Gift Application tab.</p>
     <div class="src-toolbar">
       <input type="search" id="fg-search" placeholder="Search name or handle…">
+      <button class="btn btn-outline" type="button" id="fg-gen-all-btn" style="margin-left:auto">Generate All</button>
     </div>
     <p class="src-shown-count" id="fg-shown-count"></p>
     <div class="src-table-wrap">
@@ -657,7 +691,8 @@ function renderFormGenTab() {
 
     document.getElementById("fg-tbody").innerHTML = rows.length ? rows.map(c => {
       const t = tokens[c.id];
-      const status = !t ? "Not generated" : (t.usedAt ? "Submitted" : "Link generated");
+      const stillEditable = t && t.usedAt && t.firstSubmittedAt && (Date.now() - t.firstSubmittedAt < FORM_EDIT_WINDOW_MS);
+      const status = !t ? "Not generated" : (t.usedAt ? (stillEditable ? "Submitted (editable)" : "Submitted") : "Link generated");
       const statusClass = !t ? "stage-red" : (t.usedAt ? "stage-green" : "stage-amber");
       return `
         <tr data-id="${escHtml(c.id)}">
@@ -705,6 +740,19 @@ function renderFormGenTab() {
   }
 
   document.getElementById("fg-search").addEventListener("input", render);
+  document.getElementById("fg-gen-all-btn").addEventListener("click", () => {
+    const tk = loadTokens();
+    approvedCreators.forEach(c => {
+      if (tk[c.id]) return; // never stomp an already-generated (and possibly already-sent) link
+      tk[c.id] = {
+        token: (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2))),
+        createdAt: Date.now(),
+        usedAt: null,
+      };
+    });
+    saveTokens(tk);
+    render();
+  });
   render();
 }
 
@@ -876,44 +924,107 @@ async function renderLiveTestPanel() {
 
   if (!status.connected) {
     el.innerHTML = `
-      <p>Not connected yet.</p>
+      <p>${status.expired ? "Connection expired — Testing-mode tokens only last 7 days, so this needs reconnecting." : "Not connected yet."}</p>
       <a class="btn btn-solid" href="${OUTREACH_API}/api/outreach/connect" target="_blank" rel="noopener">Connect a8itesting@gmail.com</a>
     `;
     return;
   }
 
   el.innerHTML = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-      <button class="btn btn-outline" type="button" id="live-send">Send test outreach</button>
-      <button class="btn btn-outline" type="button" id="live-refresh">Check for replies</button>
-    </div>
-    <div id="live-thread"><p class="dim">Connected. Send a test outreach email, reply to it from the inbox, then check for replies.</p></div>
-    <p class="dim" style="font-size:11.5px;margin-top:10px">"Emmett Dunn" (${escHtml(TEST_CREATOR_EMAIL)}) is already in Outreach's Tracking list for this — generate his form on Form Generator, or run Initial Outreach / Follow-up #1 on Tracking and it'll actually deliver to this real inbox.</p>
+    <div id="live-creators"><p class="dim">Loading test inboxes…</p></div>
+    <form id="live-add-creator-form" style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0" autocomplete="off">
+      <input type="text" id="live-add-name" placeholder="Name (optional)" style="width:160px">
+      <input type="email" id="live-add-email" placeholder="realinbox@gmail.com" required style="width:220px">
+      <button class="btn btn-outline" type="submit">Add test inbox</button>
+    </form>
+    <button class="btn btn-outline" type="button" id="live-refresh">Check for replies (all inboxes)</button>
+    <div id="live-threads" style="margin-top:12px"></div>
   `;
-  document.getElementById("live-send").addEventListener("click", async () => {
-    document.getElementById("live-thread").innerHTML = `<p class="dim">Sending…</p>`;
-    const r = await fetch(`${OUTREACH_API}/api/outreach/send`, { method: "POST" }).then(r => r.json());
-    document.getElementById("live-thread").innerHTML = `<p class="dim">Sent to ${escHtml(r.to)}. Go reply to it, then click "Check for replies."</p>`;
+
+  document.getElementById("live-add-creator-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("live-add-name").value.trim();
+    const email_ = document.getElementById("live-add-email").value.trim();
+    if (!email_) return;
+    const r = await fetch(`${OUTREACH_API}/api/outreach/test_creators`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email: email_ }),
+    });
+    if (!r.ok) { alert((await r.json()).detail || "Couldn't add that inbox."); return; }
+    document.getElementById("live-add-name").value = "";
+    document.getElementById("live-add-email").value = "";
+    renderLiveCreators();
   });
-  document.getElementById("live-refresh").addEventListener("click", renderLiveThread);
-  renderLiveThread();
+  document.getElementById("live-refresh").addEventListener("click", renderLiveThreads);
+
+  renderLiveCreators();
+  renderLiveThreads();
 }
 
-async function renderLiveThread() {
-  const wrap = document.getElementById("live-thread");
+async function renderLiveCreators() {
+  const wrap = document.getElementById("live-creators");
+  const { creators } = await fetch(`${OUTREACH_API}/api/outreach/test_creators`).then(r => r.json());
+  if (!creators.length) {
+    wrap.innerHTML = `<p class="dim">No test inboxes yet — add a real email below, send it a test outreach, then reply from that inbox to exercise the classifier.</p>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <p class="review-summary" style="margin-bottom:8px">Send a real test outreach to any of these, then reply from that actual inbox (try an agree, a decline, an "I only do paid," an ambiguous one, etc.) to see how Claude classifies it below.</p>
+    <table class="src-table" style="margin-bottom:0">
+      <tbody>
+        ${creators.map(c => `
+          <tr>
+            <td class="name-cell">${escHtml(c.name)}</td>
+            <td class="dim">${escHtml(c.email)}</td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="btn-icon live-send-one" type="button" data-email="${escHtml(c.email)}" title="Send test outreach to this inbox">&#9993;</button>
+              <button class="btn-icon live-remove-one" type="button" data-email="${escHtml(c.email)}" title="Remove this test inbox">&#128465;</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+  wrap.querySelectorAll(".live-send-one").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      await fetch(`${OUTREACH_API}/api/outreach/send`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: btn.dataset.email }),
+      });
+      btn.disabled = false;
+      renderLiveThreads();
+    });
+  });
+  wrap.querySelectorAll(".live-remove-one").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await fetch(`${OUTREACH_API}/api/outreach/test_creators/${encodeURIComponent(btn.dataset.email)}`, { method: "DELETE" });
+      renderLiveCreators();
+    });
+  });
+}
+
+async function renderLiveThreads() {
+  const wrap = document.getElementById("live-threads");
   wrap.innerHTML = `<p class="dim">Loading…</p>`;
   const data = await fetch(`${OUTREACH_API}/api/outreach/replies`).then(r => r.json());
   if (!data.count) {
-    wrap.innerHTML = `<p class="dim">No messages yet — send a test outreach email first.</p>`;
+    wrap.innerHTML = `<p class="dim">No messages yet — send a test outreach email above first.</p>`;
     return;
   }
-  wrap.innerHTML = data.messages.map(m => `
-    <div class="inbox-row" style="margin-bottom:8px">
+  wrap.innerHTML = data.threads.map(t => `
+    <div class="inbox-row" style="margin-bottom:10px">
       <div class="inbox-row-head" style="cursor:default">
-        <strong>${m.is_outgoing ? "You (sent)" : escHtml(m.from || "")}</strong>
-        ${m.classification ? `<span class="badge">${escHtml(m.classification)}</span>` : ""}
+        <strong>${escHtml(t.counterpart || "Unknown")}</strong>
+        <a href="${escHtml(t.gmail_url)}" target="_blank" rel="noopener" class="btn-link" style="font-size:11.5px;margin-left:8px">Open in Gmail &#8599;</a>
       </div>
-      <p class="dim" style="margin-top:4px;white-space:pre-wrap">${escHtml(m.snippet || "")}</p>
+      ${t.messages.map(m => `
+        <div style="margin-top:6px;padding-left:10px;border-left:2px solid var(--border, #333)">
+          <div><strong style="font-size:11.5px">${m.is_outgoing ? "You (sent)" : escHtml(m.from || "")}</strong>
+          ${m.classification ? `<span class="badge">${escHtml(m.classification)}</span>` : ""}</div>
+          <p class="dim" style="margin-top:2px;white-space:pre-wrap">${escHtml(m.snippet || "")}</p>
+        </div>
+      `).join("")}
     </div>
   `).join("");
 }
