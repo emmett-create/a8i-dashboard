@@ -384,16 +384,38 @@ def _classify(reply_text: str) -> str:
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     resp = client.messages.create(
         model="claude-haiku-5-5",
-        max_tokens=20,
+        # Found 2026-11-12 testing real replies: Haiku 5.5 sometimes emits a
+        # thinking block before the answer even on a plain classification
+        # task. At max_tokens=20 that occasionally used up the whole budget
+        # on thinking and left no text block at all — content[0] was the
+        # thinking block, not the category, and this crashed outright on a
+        # real "she filled out the form" reply. Room to think AND answer,
+        # plus pick the actual text block instead of assuming content[0].
+        max_tokens=300,
         system=(
             "You're sorting a creator's reply to a gifting outreach email into exactly "
-            "one category: Agree, Decline, Asks For Paid, or Needs Human Review (use "
-            "this last one for anything hedged, ambiguous, bundling an extra question, "
-            "or an out-of-office reply). Reply with ONLY the category name, nothing else."
+            "one category:\n"
+            "- Agree: a clear, unconditional yes, with no open question blocking next steps.\n"
+            "- Decline: a clear no / pass, with no counter-proposal or condition attached.\n"
+            "- Asks For Paid: explicitly says they only do paid partnerships, or asks what "
+            "the budget/rate would be for creating content.\n"
+            "- Asks About Posting: otherwise willing, and the ONLY open question is "
+            "whether posting/content is required or guaranteed (e.g. \"is there a posting "
+            "obligation?\", \"can you guarantee social coverage?\").\n"
+            "- Needs Human Review: anything else — hedged or non-committal (\"might\", "
+            "\"will circle back\"), out-of-office, a pure follow-up/bump with nothing new, "
+            "or bundling any other request or question (a specific product/model, extending "
+            "to their whole roster, proposing an alternate arrangement like a discount code, "
+            "etc.). When in doubt between Needs Human Review and anything else, pick Needs "
+            "Human Review.\n"
+            "Reply with ONLY the category name, nothing else."
         ),
         messages=[{"role": "user", "content": reply_text}],
     )
-    return resp.content[0].text.strip()
+    text_block = next((b for b in resp.content if b.type == "text"), None)
+    # No text block at all (thinking ate the whole budget) is itself an
+    # ambiguous case — route it to a human rather than crash the request.
+    return text_block.text.strip() if text_block else "Needs Human Review"
 
 
 @app.get("/api/outreach/status")
