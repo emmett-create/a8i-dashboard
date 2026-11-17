@@ -756,22 +756,26 @@ function renderFormGenTab() {
   render();
 }
 
-// ── Tab 3: Inbox (MOCKUP) — a visual/interactive prototype of what an
-// automated email inbox inside a8i could look like, grouped by what each
-// creator actually needs next, rather than one flat status column. This is
-// sample data only: no real Gmail/Resend/reply-to-address connection exists
-// yet, sending here just appends to a fake thread stored in localStorage,
-// the same way the rest of this site simulates things (Place Order,
-// Mark Sent & Download CSV) before the real backend exists. Built to let
-// the real layout and interaction get tested/felt before committing to the
-// actual email plumbing underneath it.
+// ── Tab 3: Inbox (MOCKUP) — a Gmail-style layout: "All" is a flat mirror of
+// a real inbox (every thread, newest first, unread ones bold), and the left
+// rail holds the reply-classification categories /api/outreach/replies
+// already sorts real replies into (Agree / Decline / Asks For Paid / Asks
+// About Posting / Needs Human Review), plus a Sent folder. This is sample
+// data only: no real Gmail/Resend/reply-to-address connection exists for
+// the mock rows, sending here just appends to a fake thread stored in
+// localStorage, the same way the rest of this site simulates things (Place
+// Order, Mark Sent & Download CSV) before the real backend exists. The one
+// real Gmail-connected thread (if the local backend is running) merges into
+// this same list, tagged "Live".
 const INBOX_KEY = "a8i_inbox_mock";
-const INBOX_SECTIONS = [
-  { key: "needs_outreach", label: "Needs Outreach", hint: "Not contacted yet" },
-  { key: "awaiting_reply", label: "Awaiting Reply", hint: "Sent, follow-up window hasn't hit yet" },
-  { key: "needs_followup", label: "Needs Follow-up", hint: "Sent, no reply after the follow-up window" },
-  { key: "needs_human", label: "Needs Human View", hint: "Replied, but the AI classifier isn't confident enough to auto-send" },
-  { key: "handled", label: "Handled", hint: "AI auto-sorted and replied, or a person already answered" },
+const INBOX_CATEGORIES = [
+  { key: "all", label: "All" },
+  { key: "Agree", label: "Agreed" },
+  { key: "Decline", label: "Declined" },
+  { key: "Asks For Paid", label: "Asks For Paid" },
+  { key: "Asks About Posting", label: "Asks About Posting" },
+  { key: "Needs Human Review", label: "Needs Human Review" },
+  { key: "sent", label: "Sent" },
 ];
 
 function seedInboxMock() {
@@ -779,53 +783,57 @@ function seedInboxMock() {
   const DAY = 24 * 60 * 60 * 1000;
   return [
     {
-      id: "mock-1", name: "Priya Chandra", handle: "@priyawellness", section: "needs_outreach",
-      messages: [],
+      id: "mock-1", name: "Priya Chandra", handle: "@priyawellness", classification: null, read: true,
+      messages: [
+        { from: "agency", text: "Hi Priya, we've been loving your content and would love to gift you our new skincare set to try and share your take with your audience. Here's a quick form if you're interested: [form link]", at: now - 3 * DAY },
+      ],
     },
     {
-      id: "mock-2", name: "Jonah Reyes", handle: "@jonahreyesfit", section: "needs_outreach",
-      messages: [],
+      id: "mock-2", name: "Jonah Reyes", handle: "@jonahreyesfit", classification: null, read: true,
+      messages: [
+        { from: "agency", text: "Hi Jonah, we'd love to send you our new product to try, no strings attached, just excited for you to check it out. Let me know if you're interested: [form link]", at: now - 3 * DAY },
+      ],
     },
     {
-      id: "mock-3", name: "Sasha Lin", handle: "@sashalinstyle", section: "awaiting_reply",
+      id: "mock-3", name: "Sasha Lin", handle: "@sashalinstyle", classification: null, read: true,
       messages: [
         { from: "agency", text: "Hi Sasha, we've been loving your content and would love to gift you our new skincare set to try and share your take with your audience. Here's a quick form if you're interested: [form link]", at: now - 1 * DAY },
       ],
     },
     {
-      id: "mock-4", name: "Devon Clarke", handle: "@devonclarkeco", section: "awaiting_reply",
+      id: "mock-4", name: "Devon Clarke", handle: "@devonclarkeco", classification: null, read: true,
       messages: [
         { from: "agency", text: "Hi Devon, we'd love to send you our new product to try, no strings attached, just excited for you to check it out. Let me know if you're interested: [form link]", at: now - 2 * DAY },
       ],
     },
     {
-      id: "mock-5", name: "Maribel Osei", handle: "@maribelosei", section: "needs_followup",
+      id: "mock-5", name: "Maribel Osei", handle: "@maribelosei", classification: null, read: true,
       messages: [
         { from: "agency", text: "Hi Maribel, we'd love to gift you our new launch to try and share your take with your audience. Form here if you're interested: [form link]", at: now - 6 * DAY },
       ],
     },
     {
-      id: "mock-6", name: "Theo Park", handle: "@theoparkedits", section: "needs_followup",
+      id: "mock-6", name: "Theo Park", handle: "@theoparkedits", classification: null, read: true,
       messages: [
         { from: "agency", text: "Hi Theo, loved your last few posts, would love to send you our new product to try. Form here: [form link]", at: now - 5 * DAY },
       ],
     },
     {
-      id: "mock-7", name: "Renn Castillo", handle: "@renncastillo", section: "needs_human",
+      id: "mock-7", name: "Renn Castillo", handle: "@renncastillo", classification: "Asks For Paid", read: false,
       messages: [
         { from: "agency", text: "Hi Renn, we'd love to gift you our new set, form here if you're interested: [form link]", at: now - 4 * DAY },
         { from: "creator", text: "Yes! I'd love this, but is there any way to also do a paid post alongside it? I usually charge for dedicated content like this.", at: now - 3 * DAY },
       ],
     },
     {
-      id: "mock-8", name: "Imogen Vance", handle: "@imogenvance", section: "needs_human",
+      id: "mock-8", name: "Imogen Vance", handle: "@imogenvance", classification: "Needs Human Review", read: false,
       messages: [
         { from: "agency", text: "Hi Imogen, we'd love to send you our new product, form here: [form link]", at: now - 3 * DAY },
         { from: "creator", text: "Not for me right now, but maybe check back in a couple months? Things are pretty packed this quarter.", at: now - 2 * DAY },
       ],
     },
     {
-      id: "mock-9", name: "Caleb Nwosu", handle: "@calebnwosu", section: "handled",
+      id: "mock-9", name: "Caleb Nwosu", handle: "@calebnwosu", classification: "Agree", read: false,
       messages: [
         { from: "agency", text: "Hi Caleb, we'd love to gift you our new product, form here: [form link]", at: now - 9 * DAY },
         { from: "creator", text: "Yes I'm interested, sounds great!", at: now - 8 * DAY },
@@ -833,11 +841,18 @@ function seedInboxMock() {
       ],
     },
     {
-      id: "mock-10", name: "Winnie Sato", handle: "@winniesato", section: "handled",
+      id: "mock-10", name: "Winnie Sato", handle: "@winniesato", classification: "Decline", read: false,
       messages: [
         { from: "agency", text: "Hi Winnie, we'd love to send you our new launch, form here: [form link]", at: now - 10 * DAY },
         { from: "creator", text: "Thanks so much for thinking of me, but I'm going to pass this time!", at: now - 9 * DAY },
         { from: "agency", text: "No worries at all, thanks for letting us know! We'd love to stay in touch for future opportunities if that's ever of interest.", at: now - 9 * DAY + 1800000, auto: true },
+      ],
+    },
+    {
+      id: "mock-11", name: "Lena Brooks", handle: "@lenabrooksco", classification: "Asks About Posting", read: false,
+      messages: [
+        { from: "agency", text: "Hi Lena, we'd love to send you our new launch to try, form here if you're interested: [form link]", at: now - 2 * DAY },
+        { from: "creator", text: "This sounds great, happy to try it! Just to check — is posting required, or totally optional?", at: now - 1 * DAY },
       ],
     },
   ];
@@ -861,6 +876,8 @@ function fmtInboxTime(ts) {
 
 let inboxRows = null;
 let inboxOpenId = null;
+let inboxActiveCat = "all";
+let liveRows = []; // normalized real Gmail threads from the backend, merged into the same list as the mock rows
 
 // ── Live test connection (2026-11-04) — the ONE real thread, proven against
 // an actual Gmail account via the Gmail OAuth + CASA path, sitting alongside
@@ -910,176 +927,275 @@ function seedTestCreatorIntoOutreachOnce() {
 }
 seedTestCreatorIntoOutreachOnce();
 
-async function renderLiveTestPanel() {
-  const el = document.getElementById("live-test-panel");
-  if (!el) return;
-  el.innerHTML = `<p class="dim">Checking connection…</p>`;
+// Pulls the real backend's threads into the same shape as a mock row and
+// merges them into the unified list — the real thread rides alongside the
+// illustrative ones instead of living in its own separate explainer block.
+async function refreshLiveThreads() {
+  let status;
+  try {
+    status = await fetch(`${OUTREACH_API}/api/outreach/status`).then(r => r.json());
+  } catch { liveRows = []; renderInboxSidebar(); renderInboxMain(); return; }
+  if (!status.connected) { liveRows = []; renderInboxSidebar(); renderInboxMain(); return; }
+
+  const { creators } = await fetch(`${OUTREACH_API}/api/outreach/test_creators`).then(r => r.json()).catch(() => ({ creators: [] }));
+  const nameByEmail = Object.fromEntries((creators || []).map(c => [c.email, c.name]));
+
+  const data = await fetch(`${OUTREACH_API}/api/outreach/replies`).then(r => r.json()).catch(() => ({ threads: [] }));
+  liveRows = (data.threads || []).map(t => {
+    const incoming = t.messages.filter(m => !m.is_outgoing);
+    const lastIncoming = incoming[incoming.length - 1];
+    return {
+      id: "live-" + t.thread_id,
+      name: nameByEmail[t.counterpart] || t.counterpart || "Unknown",
+      handle: t.counterpart || "",
+      classification: lastIncoming ? (lastIncoming.classification || "Needs Human Review") : null,
+      read: !incoming.some(m => m.is_unread),
+      isLive: true,
+      gmail_url: t.gmail_url,
+      messages: t.messages.map(m => ({ from: m.is_outgoing ? "agency" : "creator", text: m.body || m.snippet || "", at: m.internal_date })),
+    };
+  });
+  renderInboxSidebar();
+  renderInboxMain();
+}
+
+// Everything about managing the real Gmail test connection — explainer
+// copy, the test-inbox list, add/remove, manual refresh — lives in this
+// on-demand modal instead of taking up permanent space at the top of the
+// tab. The real thread itself still shows up right in the main inbox list.
+async function openTestInboxModal() {
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:560px">
+      <h3>Test inboxes</h3>
+      <p class="dim" style="font-size:12.5px">The real Gmail OAuth + CASA path, connected to real inboxes. Send a test outreach, then reply from that inbox — it'll show up classified in the inbox list above, tagged "Live".</p>
+      <div id="test-inbox-modal-body"><p class="dim">Checking connection…</p></div>
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn btn-outline" type="button" id="test-inbox-close">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById("test-inbox-close").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+
+  const body = document.getElementById("test-inbox-modal-body");
   let status;
   try {
     status = await fetch(`${OUTREACH_API}/api/outreach/status`).then(r => r.json());
   } catch {
-    el.innerHTML = `<p class="dim">Can't reach the local backend at ${escHtml(OUTREACH_API)} — is it running? (<code>uvicorn app:app --port 8910</code> from the repo root)</p>`;
+    body.innerHTML = `<p class="dim">Can't reach the local backend at ${escHtml(OUTREACH_API)} — is it running? (<code>uvicorn app:app --port 8910</code> from the repo root)</p>`;
     return;
   }
-
   if (!status.connected) {
-    el.innerHTML = `
+    body.innerHTML = `
       <p>${status.expired ? "Connection expired — Testing-mode tokens only last 7 days, so this needs reconnecting." : "Not connected yet."}</p>
       <a class="btn btn-solid" href="${OUTREACH_API}/api/outreach/connect" target="_blank" rel="noopener">Connect a8itesting@gmail.com</a>
     `;
     return;
   }
 
-  el.innerHTML = `
-    <div id="live-creators"><p class="dim">Loading test inboxes…</p></div>
-    <form id="live-add-creator-form" style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0" autocomplete="off">
-      <input type="text" id="live-add-name" placeholder="Name (optional)" style="width:160px">
-      <input type="email" id="live-add-email" placeholder="realinbox@gmail.com" required style="width:220px">
-      <button class="btn btn-outline" type="submit">Add test inbox</button>
-    </form>
-    <button class="btn btn-outline" type="button" id="live-refresh">Check for replies (all inboxes)</button>
-    <div id="live-threads" style="margin-top:12px"></div>
-  `;
-
-  document.getElementById("live-add-creator-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const name = document.getElementById("live-add-name").value.trim();
-    const email_ = document.getElementById("live-add-email").value.trim();
-    if (!email_) return;
-    const r = await fetch(`${OUTREACH_API}/api/outreach/test_creators`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email: email_ }),
-    });
-    if (!r.ok) { alert((await r.json()).detail || "Couldn't add that inbox."); return; }
-    document.getElementById("live-add-name").value = "";
-    document.getElementById("live-add-email").value = "";
-    renderLiveCreators();
-  });
-  document.getElementById("live-refresh").addEventListener("click", renderLiveThreads);
-
-  renderLiveCreators();
-  renderLiveThreads();
-}
-
-async function renderLiveCreators() {
-  const wrap = document.getElementById("live-creators");
-  const { creators } = await fetch(`${OUTREACH_API}/api/outreach/test_creators`).then(r => r.json());
-  if (!creators.length) {
-    wrap.innerHTML = `<p class="dim">No test inboxes yet — add a real email below, send it a test outreach, then reply from that inbox to exercise the classifier.</p>`;
-    return;
-  }
-  wrap.innerHTML = `
-    <p class="review-summary" style="margin-bottom:8px">Send a real test outreach to any of these, then reply from that actual inbox (try an agree, a decline, an "I only do paid," an ambiguous one, etc.) to see how Claude classifies it below.</p>
-    <table class="src-table" style="margin-bottom:0">
-      <tbody>
-        ${creators.map(c => `
-          <tr>
-            <td class="name-cell">${escHtml(c.name)}</td>
-            <td class="dim">${escHtml(c.email)}</td>
-            <td style="text-align:right;white-space:nowrap">
-              <button class="btn-icon live-send-one" type="button" data-email="${escHtml(c.email)}" title="Send test outreach to this inbox">&#9993;</button>
-              <button class="btn-icon live-remove-one" type="button" data-email="${escHtml(c.email)}" title="Remove this test inbox">&#128465;</button>
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
-  wrap.querySelectorAll(".live-send-one").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      await fetch(`${OUTREACH_API}/api/outreach/send`, {
+  async function renderCreators() {
+    const { creators } = await fetch(`${OUTREACH_API}/api/outreach/test_creators`).then(r => r.json());
+    body.innerHTML = `
+      <table class="src-table" style="margin-bottom:12px">
+        <tbody>
+          ${creators.length ? creators.map(c => `
+            <tr>
+              <td class="name-cell">${escHtml(c.name)}</td>
+              <td class="dim">${escHtml(c.email)}</td>
+              <td style="text-align:right;white-space:nowrap">
+                <button class="btn-icon test-send-one" type="button" data-email="${escHtml(c.email)}" title="Send test outreach to this inbox">&#9993;</button>
+                <button class="btn-icon test-remove-one" type="button" data-email="${escHtml(c.email)}" title="Remove this test inbox">&#128465;</button>
+              </td>
+            </tr>
+          `).join("") : `<tr><td class="dim" style="padding:10px 0">No test inboxes yet — add a real email below, send it a test outreach, then reply from that inbox.</td></tr>`}
+        </tbody>
+      </table>
+      <form id="test-add-form" style="display:flex;gap:8px;flex-wrap:wrap" autocomplete="off">
+        <input type="text" id="test-add-name" placeholder="Name (optional)" style="width:150px">
+        <input type="email" id="test-add-email" placeholder="realinbox@gmail.com" required style="width:200px">
+        <button class="btn btn-outline" type="submit">Add</button>
+      </form>
+      <button class="btn btn-outline" type="button" id="test-refresh-btn" style="margin-top:10px">Check for replies now</button>
+    `;
+    document.getElementById("test-add-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("test-add-name").value.trim();
+      const email_ = document.getElementById("test-add-email").value.trim();
+      if (!email_) return;
+      const r = await fetch(`${OUTREACH_API}/api/outreach/test_creators`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: btn.dataset.email }),
+        body: JSON.stringify({ name, email: email_ }),
       });
-      btn.disabled = false;
-      renderLiveThreads();
+      if (!r.ok) { alert((await r.json()).detail || "Couldn't add that inbox."); return; }
+      renderCreators();
     });
-  });
-  wrap.querySelectorAll(".live-remove-one").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      await fetch(`${OUTREACH_API}/api/outreach/test_creators/${encodeURIComponent(btn.dataset.email)}`, { method: "DELETE" });
-      renderLiveCreators();
+    body.querySelectorAll(".test-send-one").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        await fetch(`${OUTREACH_API}/api/outreach/send`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: btn.dataset.email }),
+        });
+        btn.disabled = false;
+        refreshLiveThreads();
+      });
     });
-  });
+    body.querySelectorAll(".test-remove-one").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await fetch(`${OUTREACH_API}/api/outreach/test_creators/${encodeURIComponent(btn.dataset.email)}`, { method: "DELETE" });
+        renderCreators();
+      });
+    });
+    document.getElementById("test-refresh-btn").addEventListener("click", () => refreshLiveThreads());
+  }
+  renderCreators();
 }
 
-async function renderLiveThreads() {
-  const wrap = document.getElementById("live-threads");
-  wrap.innerHTML = `<p class="dim">Loading…</p>`;
-  const data = await fetch(`${OUTREACH_API}/api/outreach/replies`).then(r => r.json());
-  if (!data.count) {
-    wrap.innerHTML = `<p class="dim">No messages yet — send a test outreach email above first.</p>`;
-    return;
-  }
-  wrap.innerHTML = data.threads.map(t => `
-    <div class="inbox-row" style="margin-bottom:10px">
-      <div class="inbox-row-head" style="cursor:default">
-        <strong>${escHtml(t.counterpart || "Unknown")}</strong>
-        <a href="${escHtml(t.gmail_url)}" target="_blank" rel="noopener" class="btn-link" style="font-size:11.5px;margin-left:8px">Open in Gmail &#8599;</a>
-      </div>
-      ${t.messages.map(m => `
-        <div style="margin-top:6px;padding-left:10px;border-left:2px solid var(--border, #333)">
-          <div><strong style="font-size:11.5px">${m.is_outgoing ? "You (sent)" : escHtml(m.from || "")}</strong>
-          ${m.classification ? `<span class="badge">${escHtml(m.classification)}</span>` : ""}</div>
-          <p class="dim" style="margin-top:2px;white-space:pre-wrap">${escHtml(m.snippet || "")}</p>
-        </div>
-      `).join("")}
-    </div>
-  `).join("");
+function allInboxRows() { return [...liveRows, ...inboxRows]; }
+function lastMsgAt(row) {
+  const m = row.messages[row.messages.length - 1];
+  return m ? +new Date(m.at) : 0;
+}
+function classificationBadge(cls) {
+  if (!cls) return "";
+  const tone = cls === "Agree" ? "green" : cls === "Decline" ? "muted" : "amber";
+  return `<span class="badge badge-${tone}">${escHtml(cls)}</span>`;
 }
 
 function renderInboxTab() {
   if (!inboxRows) inboxRows = loadInboxMock();
 
   content.innerHTML = `
-    <div class="src-label">Inbox</div>
+    <div class="src-label" style="display:flex;align-items:center">
+      Inbox
+      <button class="btn-link" type="button" id="inbox-test-mgmt-link" style="margin-left:auto;font-size:11px">Manage test inboxes</button>
+    </div>
+    <div class="inbox-layout">
+      <div class="inbox-sidebar" id="inbox-sidebar"></div>
+      <div class="inbox-main" id="inbox-main"></div>
+    </div>
+  `;
 
-    <div class="src-label" style="font-size:14px;margin-top:0">Live test connection</div>
-    <p class="review-summary">The real Gmail OAuth + CASA path, connected to one real test account — this is the actual mechanism working, not a mockup.</p>
-    <div id="live-test-panel"></div>
+  document.getElementById("inbox-test-mgmt-link").addEventListener("click", openTestInboxModal);
 
-    <div class="src-label" style="font-size:14px;margin-top:24px">Full inbox view (illustrative)</div>
-    <p class="review-summary">Every creator conversation, organized by what needs to happen next — sample data so the layout and interaction can be tried, since we only have one real connected thread so far (above), not a full real dataset.</p>
-    <div class="inbox-mock-note">
-      <strong>Mockup, not live:</strong> sending here just appends to a fake thread saved in this browser. Nothing is actually emailed. Reset the sample data any time.
+  renderInboxSidebar();
+  renderInboxMain();
+  refreshLiveThreads();
+}
+
+function renderInboxSidebar() {
+  const sidebar = document.getElementById("inbox-sidebar");
+  const rows = allInboxRows();
+  sidebar.innerHTML = INBOX_CATEGORIES.map(cat => {
+    let count, unread;
+    if (cat.key === "all") {
+      count = rows.length;
+      unread = rows.filter(r => !r.read).length;
+    } else if (cat.key === "sent") {
+      count = rows.reduce((n, r) => n + r.messages.filter(m => m.from === "agency").length, 0);
+      unread = 0;
+    } else {
+      const matched = rows.filter(r => r.classification === cat.key);
+      count = matched.length;
+      unread = matched.filter(r => !r.read).length;
+    }
+    return `
+      <button class="inbox-cat-btn ${inboxActiveCat === cat.key ? "active" : ""}" type="button" data-cat="${escHtml(cat.key)}">
+        <span>${escHtml(cat.label)}</span>
+        <span class="inbox-cat-count ${unread ? "unread" : ""}">${unread || count || ""}</span>
+      </button>
+    `;
+  }).join("");
+  sidebar.querySelectorAll(".inbox-cat-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      inboxActiveCat = btn.dataset.cat;
+      inboxOpenId = null;
+      renderInboxSidebar();
+      renderInboxMain();
+    });
+  });
+}
+
+function renderInboxMain() {
+  const wrap = document.getElementById("inbox-main");
+  if (inboxActiveCat === "sent") { renderSentList(wrap); return; }
+
+  const rows = allInboxRows()
+    .filter(r => inboxActiveCat === "all" || r.classification === inboxActiveCat)
+    .slice()
+    .sort((a, b) => lastMsgAt(b) - lastMsgAt(a));
+
+  wrap.innerHTML = `
+    <div class="inbox-main-toolbar">
+      <span class="dim">${rows.length} conversation${rows.length === 1 ? "" : "s"}</span>
       <button class="btn-icon" type="button" id="inbox-reset" title="Reset sample data">&#8635;</button>
     </div>
-    <div id="inbox-sections"></div>
+    <div class="inbox-rows" id="inbox-rows-list">
+      ${rows.length ? rows.map(r => renderInboxRow(r)).join("") : `<p class="dim inbox-empty">Nothing here right now.</p>`}
+    </div>
   `;
 
   document.getElementById("inbox-reset").addEventListener("click", () => {
     inboxRows = seedInboxMock();
     saveInboxMock(inboxRows);
     inboxOpenId = null;
-    renderInboxSections();
+    renderInboxSidebar();
+    renderInboxMain();
   });
 
-  renderLiveTestPanel();
-  renderInboxSections();
+  bindInboxRowEvents(wrap);
 }
 
-function renderInboxSections() {
-  const wrap = document.getElementById("inbox-sections");
-  wrap.innerHTML = INBOX_SECTIONS.map(sec => {
-    const rows = inboxRows.filter(r => r.section === sec.key);
-    return `
-      <div class="inbox-section">
-        <div class="inbox-section-head">
-          <span class="inbox-section-label">${escHtml(sec.label)}</span>
-          <span class="inbox-section-count">${rows.length}</span>
-          <span class="dim inbox-section-hint">${escHtml(sec.hint)}</span>
-        </div>
-        ${rows.length ? `<div class="inbox-rows">${rows.map(r => renderInboxRow(r)).join("")}</div>` : `<p class="dim inbox-empty">Nothing here right now.</p>`}
-      </div>
-    `;
-  }).join("");
+function renderSentList(wrap) {
+  const sent = [];
+  allInboxRows().forEach(row => {
+    row.messages.forEach(m => {
+      if (m.from === "agency") sent.push({ rowId: row.id, name: row.name, handle: row.handle, text: m.text, at: m.at, auto: !!m.auto });
+    });
+  });
+  sent.sort((a, b) => +new Date(b.at) - +new Date(a.at));
 
+  wrap.innerHTML = `
+    <div class="inbox-main-toolbar"><span class="dim">${sent.length} sent email${sent.length === 1 ? "" : "s"}</span></div>
+    <div class="inbox-rows">
+      ${sent.length ? sent.map(m => `
+        <div class="inbox-row sent-row" data-row-id="${escHtml(m.rowId)}">
+          <div class="inbox-row-head">
+            <span class="inbox-row-name">${escHtml(m.name)}</span>
+            <span class="inbox-row-handle dim">${escHtml(m.handle)}</span>
+            ${m.auto ? `<span class="badge badge-muted">Auto</span>` : ""}
+            <span class="inbox-row-snippet dim">${escHtml(m.text.slice(0, 80))}${m.text.length > 80 ? "…" : ""}</span>
+            <span class="inbox-row-time dim">${fmtInboxTime(m.at).split(" · ")[0]}</span>
+          </div>
+        </div>
+      `).join("") : `<p class="dim inbox-empty">Nothing sent yet.</p>`}
+    </div>
+  `;
+  wrap.querySelectorAll(".sent-row").forEach(el => {
+    el.addEventListener("click", () => {
+      inboxActiveCat = "all";
+      inboxOpenId = el.dataset.rowId;
+      renderInboxSidebar();
+      renderInboxMain();
+    });
+  });
+}
+
+function bindInboxRowEvents(wrap) {
   wrap.querySelectorAll(".inbox-row-head").forEach(el => {
     el.addEventListener("click", () => {
       const id = el.closest(".inbox-row").dataset.id;
       inboxOpenId = inboxOpenId === id ? null : id;
-      renderInboxSections();
+      const row = allInboxRows().find(r => r.id === id);
+      if (row && !row.isLive && !row.read) {
+        row.read = true;
+        saveInboxMock(inboxRows);
+        renderInboxSidebar();
+      }
+      renderInboxMain();
     });
   });
 
@@ -1091,18 +1207,14 @@ function renderInboxSections() {
       const text = textarea.value.trim();
       if (!text) return;
       row.messages.push({ from: "agency", text, at: Date.now() });
-      // A real human reply from Needs Human View resolves that conversation —
-      // mirrors the design: AI handles the clean cases, a person's own send
-      // here is what counts as "handled" for the messy ones.
-      if (row.section === "needs_human") row.section = "handled";
       saveInboxMock(inboxRows);
-      renderInboxSections();
+      renderInboxMain();
     });
   });
 
-  // Fake "simulate a reply" control per row still in Needs Outreach / Awaiting
-  // Reply / Needs Follow-up — lets you see a creator's reply land and the AI
-  // sort it, without needing a real inbox to test against.
+  // Fake "simulate a reply" control for rows with no classification yet —
+  // lets you see a creator's reply land and the AI sort it into the right
+  // category, without needing a real inbox to test against.
   wrap.querySelectorAll(".inbox-sim-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1110,18 +1222,21 @@ function renderInboxSections() {
       const outcome = btn.dataset.outcome;
       const row = inboxRows.find(r => r.id === id);
       const SIM_REPLIES = {
-        agree: { text: "Yes, I'd love this! Just sent over my info.", section: "handled", autoText: "Amazing! Please fill out the form below with your shipping info and we'll get this right out to you: [form link]" },
-        decline: { text: "Thanks for thinking of me, but I'll pass this time!", section: "handled", autoText: "No worries at all, thanks for letting us know! We'd love to stay in touch for future opportunities." },
-        paid: { text: "Interested, but I only do paid partnerships, what's the budget?", section: "handled", autoText: "Totally understand! This one's gifting-only, but we'd love to have you — feel free to reach out to partnerships@agency-eight.com if a paid collab ever makes sense down the line." },
-        messy: { text: "Maybe, depends what else is involved — can you tell me more about the brand first?", section: "needs_human", autoText: null },
+        agree: { text: "Yes, I'd love this! Just sent over my info.", classification: "Agree", autoText: "Amazing! Please fill out the form below with your shipping info and we'll get this right out to you: [form link]" },
+        decline: { text: "Thanks for thinking of me, but I'll pass this time!", classification: "Decline", autoText: "No worries at all, thanks for letting us know! We'd love to stay in touch for future opportunities." },
+        paid: { text: "Interested, but I only do paid partnerships, what's the budget?", classification: "Asks For Paid", autoText: "Totally understand! This one's gifting-only, but we'd love to have you — feel free to reach out to partnerships@agency-eight.com if a paid collab ever makes sense down the line." },
+        posting: { text: "This sounds great, happy to try it! Just to check — is posting required, or totally optional?", classification: "Asks About Posting", autoText: null },
+        messy: { text: "Maybe, depends what else is involved — can you tell me more about the brand first?", classification: "Needs Human Review", autoText: null },
       };
       const sim = SIM_REPLIES[outcome];
       row.messages.push({ from: "creator", text: sim.text, at: Date.now() });
-      row.section = sim.section;
+      row.classification = sim.classification;
+      row.read = false;
       if (sim.autoText) row.messages.push({ from: "agency", text: sim.autoText, at: Date.now() + 1000, auto: true });
       saveInboxMock(inboxRows);
       inboxOpenId = id;
-      renderInboxSections();
+      renderInboxSidebar();
+      renderInboxMain();
     });
   });
 }
@@ -1129,21 +1244,16 @@ function renderInboxSections() {
 function renderInboxRow(row) {
   const isOpen = inboxOpenId === row.id;
   const last = row.messages[row.messages.length - 1];
-  const needsSimReply = ["awaiting_reply", "needs_followup"].includes(row.section);
+  const canSimulate = !row.classification && !row.isLive;
   return `
-    <div class="inbox-row ${isOpen ? "open" : ""}" data-id="${escHtml(row.id)}">
+    <div class="inbox-row ${isOpen ? "open" : ""} ${!row.read ? "unread" : ""}" data-id="${escHtml(row.id)}">
       <div class="inbox-row-head">
-        <span class="inbox-row-name">${escHtml(row.name)}</span>
+        <span class="inbox-unread-dot" aria-hidden="true"></span>
+        <span class="inbox-row-name">${escHtml(row.name)}${row.isLive ? `<span class="badge badge-green">Live</span>` : ""}</span>
         <span class="inbox-row-handle dim">${escHtml(row.handle)}</span>
+        ${classificationBadge(row.classification)}
         <span class="inbox-row-snippet dim">${last ? escHtml(last.text.slice(0, 70)) + (last.text.length > 70 ? "…" : "") : "No messages yet"}</span>
-        ${needsSimReply ? `
-          <span class="inbox-sim-group" onclick="event.stopPropagation()">
-            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="agree">Simulate: Agree</button>
-            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="decline">Decline</button>
-            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="paid">Asks Paid</button>
-            <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="messy">Messy reply</button>
-          </span>
-        ` : ""}
+        <span class="inbox-row-time dim">${last ? fmtInboxTime(last.at).split(" · ")[0] : ""}</span>
       </div>
       ${isOpen ? `
         <div class="inbox-thread">
@@ -1153,10 +1263,23 @@ function renderInboxRow(row) {
               <div class="inbox-bubble-meta">${m.auto ? "Auto-sent · " : ""}${fmtInboxTime(m.at)}</div>
             </div>
           `).join("") : `<p class="dim" style="padding:10px 0">No messages yet — this creator hasn't been reached out to.</p>`}
+          ${row.isLive
+            ? `<a class="btn-link" href="${escHtml(row.gmail_url)}" target="_blank" rel="noopener" style="font-size:11.5px">Open in Gmail &#8599;</a>`
+            : `
           <div class="inbox-reply-row">
             <textarea class="inbox-reply-input" data-id="${escHtml(row.id)}" placeholder="Type a reply…"></textarea>
             <button class="btn btn-solid inbox-send-btn" type="button" data-id="${escHtml(row.id)}" style="padding:10px 20px;font-size:11px">Send</button>
-          </div>
+          </div>`}
+          ${canSimulate ? `
+            <div class="inbox-sim-group">
+              <span class="dim" style="font-size:11px;margin-right:4px">Simulate a reply:</span>
+              <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="agree">Agree</button>
+              <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="decline">Decline</button>
+              <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="paid">Asks Paid</button>
+              <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="posting">Asks Posting</button>
+              <button class="inbox-sim-btn" type="button" data-id="${escHtml(row.id)}" data-outcome="messy">Needs Review</button>
+            </div>
+          ` : ""}
         </div>
       ` : ""}
     </div>

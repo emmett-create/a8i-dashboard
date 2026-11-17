@@ -571,6 +571,7 @@ def outreach_replies():
             "snippet": full.get("snippet"),
             "body": body,
             "is_outgoing": is_outgoing,
+            "is_unread": "UNREAD" in (full.get("labelIds") or []),
             "internal_date": int(full.get("internalDate") or 0),
         }
         if ANTHROPIC_API_KEY and body and not is_outgoing:
