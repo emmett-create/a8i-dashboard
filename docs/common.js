@@ -96,5 +96,5 @@ function getSessionId() {
 }
 
 function renderFooter() {
-  return `<footer class="site-footer">&copy; 2026 Agency Eight. A8I is built on the same system behind Agency Eight's full-service gifting programs.</footer>`;
+  return `<footer class="site-footer">&copy; 2026 Agency Eight. A8I is built on the same system behind Agency Eight's full-service gifting programs. &middot; <a href="privacy.html">Privacy Policy</a></footer>`;
 }

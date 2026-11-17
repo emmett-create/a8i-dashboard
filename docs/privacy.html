@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A8I — Privacy Policy</title>
+<link rel="icon" href="assets/icon-red.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<section class="hero hero-small">
+<div id="header"></div>
+  <div class="hero-inner">
+    <div class="eyebrow">Agency Eight</div>
+    <h1>Privacy Policy</h1>
+    <p class="sub">A8I — effective November 17, 2026</p>
+  </div>
+</section>
+
+<div class="asterisk-divider">* * *</div>
+
+<section class="section">
+  <div class="legal-block">
+
+    <p>A8I is built and operated by Agency Eight. This policy explains what
+    data A8I accesses, why, and what happens to it — specifically covering
+    the Gmail access A8I uses to send outreach emails on a connected
+    account's behalf and to read replies to those emails.</p>
+
+    <h3>What we access, and why</h3>
+    <p>When an Agency Eight team member or an A8I client connects a Gmail
+    account, A8I requests two Google OAuth scopes:</p>
+    <ul>
+      <li><strong>https://www.googleapis.com/auth/gmail.send</strong> — used
+      only to send outreach emails (initial outreach and follow-ups) from
+      the connected account to creators/brands on behalf of the account
+      owner. A8I never sends anything other than the outreach messages the
+      account owner has configured.</li>
+      <li><strong>https://www.googleapis.com/auth/gmail.readonly</strong> —
+      used only to find and read replies to those specific outreach emails,
+      so A8I can classify each reply (for example: agreed, declined, asked
+      about payment, needs human review) and surface it back to the account
+      owner. A8I does not read, search, or otherwise access any other email
+      in the account.</li>
+    </ul>
+
+    <h3>What we store</h3>
+    <p>A8I does not copy or store the contents of any email. Reply data is
+    read live from Gmail each time it's needed, held in memory only long
+    enough to generate a classification, and then discarded — it is never
+    written to a database, log file, or backup.</p>
+    <p>The only things A8I stores are: (1) the OAuth credentials needed to
+    stay connected to the account the owner authorized, kept on Agency
+    Eight's own server infrastructure and never shared with a third party
+    except as described below, and (2) the small set of outreach metadata
+    the account owner enters themselves (e.g. a creator's name and email
+    address, to know who to send to).</p>
+
+    <h3>Who else sees it</h3>
+    <p>Reply content is passed, transiently and only at the moment a reply
+    needs classifying, to Anthropic's Claude API as our AI sub-processor,
+    solely to generate the classification label described above. Anthropic
+    does not use this data to train its models under Agency Eight's
+    commercial terms with Anthropic. No other third party receives email
+    content.</p>
+
+    <h3>Who can access this inside Agency Eight</h3>
+    <p>Only Agency Eight's operations team members working directly on A8I
+    have access to the connected accounts' credentials and the resulting
+    classification output.</p>
+
+    <h3>Revoking access</h3>
+    <p>Any connected account owner can revoke A8I's access at any time from
+    their Google Account's
+    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Security &amp; third-party access settings</a>.
+    Revoking access immediately stops A8I from sending or reading mail on
+    that account.</p>
+
+    <h3>Changes to this policy</h3>
+    <p>If what A8I accesses or how it's used changes, this page will be
+    updated and the effective date above will change accordingly.</p>
+
+    <h3>Contact</h3>
+    <p>Questions about this policy or A8I's data practices can be sent to
+    <a href="mailto:emmett@agency-eight.com">emmett@agency-eight.com</a>.</p>
+
+  </div>
+</section>
+
+<div id="footer"></div>
+
+<script src="common.js"></script>
+<script>
+document.getElementById("header").innerHTML = renderHeader({ onDark: true, back: "process.html" });
+document.getElementById("footer").innerHTML = renderFooter();
+</script>
+</body>
+</html>
