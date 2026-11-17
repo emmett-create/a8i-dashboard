@@ -963,14 +963,24 @@ async function refreshLiveThreads() {
 // copy, the test-inbox list, add/remove, manual refresh — lives in this
 // on-demand modal instead of taking up permanent space at the top of the
 // tab. The real thread itself still shows up right in the main inbox list.
+//
+// Mirrors the real client setup flow this is standing in for: when a real
+// a8i client connects their inbox, the first thing they'd do is say which
+// platform their email is on (Gmail vs Outlook) before anything
+// provider-specific happens. Gmail proceeds through the real, working
+// connect flow below. Outlook is left honest about not being wired up yet —
+// there's no Microsoft Entra app registration behind it — rather than
+// faking a working button; unlike Gmail it won't need a CASA-style
+// assessment once it IS built (see Mail.Read/Mail.Send admin-consent
+// research, 2026-11-17).
 async function openTestInboxModal() {
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   overlay.innerHTML = `
     <div class="modal-card" style="max-width:560px">
-      <h3>Test inboxes</h3>
-      <p class="dim" style="font-size:12.5px">The real Gmail OAuth + CASA path, connected to real inboxes. Send a test outreach, then reply from that inbox — it'll show up classified in the inbox list above, tagged "Live".</p>
-      <div id="test-inbox-modal-body"><p class="dim">Checking connection…</p></div>
+      <h3>Connect an inbox</h3>
+      <p class="dim" style="font-size:12.5px">Choose the platform this email is on, then connect it. Send a test outreach, then reply from that inbox — it'll show up classified in the inbox list above, tagged "Live".</p>
+      <div id="test-inbox-modal-body"></div>
       <div class="modal-actions" style="margin-top:14px">
         <button class="btn btn-outline" type="button" id="test-inbox-close">Close</button>
       </div>
@@ -981,19 +991,59 @@ async function openTestInboxModal() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 
   const body = document.getElementById("test-inbox-modal-body");
-  let status;
-  try {
-    status = await fetch(`${OUTREACH_API}/api/outreach/status`).then(r => r.json());
-  } catch {
-    body.innerHTML = `<p class="dim">Can't reach the local backend at ${escHtml(OUTREACH_API)} — is it running? (<code>uvicorn app:app --port 8910</code> from the repo root)</p>`;
-    return;
+
+  // Delegated once, up front — every screen below re-renders body.innerHTML,
+  // so a listener bound to a specific "back" element would be lost each time.
+  body.addEventListener("click", (e) => {
+    if (e.target.id === "provider-back-btn") renderProviderPicker();
+  });
+
+  function backLink() {
+    return `<button class="btn-link" type="button" id="provider-back-btn" style="margin-top:14px;display:block">&larr; Choose a different platform</button>`;
   }
-  if (!status.connected) {
+
+  function renderProviderPicker() {
     body.innerHTML = `
-      <p>${status.expired ? "Connection expired — Testing-mode tokens only last 7 days, so this needs reconnecting." : "Not connected yet."}</p>
-      <a class="btn btn-solid" href="${OUTREACH_API}/api/outreach/connect" target="_blank" rel="noopener">Connect a8itesting@gmail.com</a>
+      <div class="provider-pick-row">
+        <button class="provider-pick-btn" type="button" id="provider-pick-gmail">
+          <strong>Gmail</strong>
+          <span class="dim">Google Workspace too</span>
+        </button>
+        <button class="provider-pick-btn" type="button" id="provider-pick-outlook">
+          <strong>Outlook</strong>
+          <span class="dim">Microsoft 365 too</span>
+        </button>
+      </div>
     `;
-    return;
+    document.getElementById("provider-pick-gmail").addEventListener("click", renderGmailFlow);
+    document.getElementById("provider-pick-outlook").addEventListener("click", renderOutlookFlow);
+  }
+
+  function renderOutlookFlow() {
+    body.innerHTML = `
+      <p>Outlook/Microsoft 365 isn't connected yet — there's no Microsoft Entra app registration behind this button yet, so it's not functional. Unlike Gmail, Outlook's <code>Mail.Read</code>/<code>Mail.Send</code> don't need Google's CASA-style security assessment at all, so once this is prioritized it should be a lighter build than the Gmail side was.</p>
+      ${backLink()}
+    `;
+  }
+
+  async function renderGmailFlow() {
+    body.innerHTML = `<p class="dim">Checking connection…</p>${backLink()}`;
+    let status;
+    try {
+      status = await fetch(`${OUTREACH_API}/api/outreach/status`).then(r => r.json());
+    } catch {
+      body.innerHTML = `<p class="dim">Can't reach the local backend at ${escHtml(OUTREACH_API)} — is it running? (<code>uvicorn app:app --port 8910</code> from the repo root)</p>${backLink()}`;
+      return;
+    }
+    if (!status.connected) {
+      body.innerHTML = `
+        <p>${status.expired ? "Connection expired — Testing-mode tokens only last 7 days, so this needs reconnecting." : "Not connected yet."}</p>
+        <a class="btn btn-solid" href="${OUTREACH_API}/api/outreach/connect" target="_blank" rel="noopener">Connect a8itesting@gmail.com</a>
+        ${backLink()}
+      `;
+      return;
+    }
+    renderCreators();
   }
 
   async function renderCreators() {
@@ -1019,6 +1069,7 @@ async function openTestInboxModal() {
         <button class="btn btn-outline" type="submit">Add</button>
       </form>
       <button class="btn btn-outline" type="button" id="test-refresh-btn" style="margin-top:10px">Check for replies now</button>
+      ${backLink()}
     `;
     document.getElementById("test-add-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -1051,7 +1102,7 @@ async function openTestInboxModal() {
     });
     document.getElementById("test-refresh-btn").addEventListener("click", () => refreshLiveThreads());
   }
-  renderCreators();
+  renderProviderPicker();
 }
 
 function allInboxRows() { return [...liveRows, ...inboxRows]; }
