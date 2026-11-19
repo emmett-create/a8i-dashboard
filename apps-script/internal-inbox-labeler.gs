@@ -36,14 +36,14 @@
 
 // ── Config ───────────────────────────────────────────────────────────────
 const ANTHROPIC_MODEL = "claude-haiku-5-5"; // same model a8i's own backend uses for this exact task — cheap, fast, plenty for short-reply classification
-const PROCESSED_LABEL = "A8I/Processed";
+const PROCESSED_LABEL = "Processed";
 const MAX_THREADS_PER_RUN = 25; // bounds one run's time/quota use; a big backlog just finishes over several 10-minute runs instead of one long one
 const CATEGORY_LABELS = {
-  "Agree": "A8I/Agree",
-  "Decline": "A8I/Decline",
-  "Asks For Paid": "A8I/Asks For Paid",
-  "Asks About Posting": "A8I/Asks About Posting",
-  "Needs Human Review": "A8I/Needs Human Review",
+  "Agree": "Agree",
+  "Decline": "Decline",
+  "Asks For Paid": "Asks For Paid",
+  "Asks About Posting": "Asks About Posting",
+  "Needs Human Review": "Needs Human Review",
 };
 
 // Identical taxonomy to app.py's _classify() — keep these in sync if that
@@ -77,8 +77,13 @@ function setup() {
     .timeBased()
     .everyMinutes(10)
     .create();
+  // Baked into every future search as "after:" below — existing inbox mail
+  // is never touched, only threads with a message received from this
+  // moment forward. Stored in epoch seconds since that's what Gmail's
+  // search operator expects.
+  PropertiesService.getScriptProperties().setProperty("SETUP_AT", String(Math.floor(Date.now() / 1000)));
   getOrCreateLabels_(); // creates all labels up front so they're visible in Gmail immediately, not just on first match
-  Logger.log("Setup complete — labelNewThreads will now run every 10 minutes.");
+  Logger.log("Setup complete — labelNewThreads will now run every 10 minutes, only on mail received from now on.");
 }
 
 /**
@@ -87,14 +92,20 @@ function setup() {
  * the Processed marker so it's never reconsidered.
  */
 function labelNewThreads() {
-  const apiKey = PropertiesService.getScriptProperties().getProperty("ANTHROPIC_API_KEY");
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty("ANTHROPIC_API_KEY");
   if (!apiKey) {
     Logger.log("ANTHROPIC_API_KEY isn't set in Script Properties — see setup instructions at the top of this file.");
     return;
   }
+  const setupAt = props.getProperty("SETUP_AT");
+  if (!setupAt) {
+    Logger.log("SETUP_AT isn't set — run `setup` once first.");
+    return;
+  }
 
   const labels = getOrCreateLabels_();
-  const threads = GmailApp.search(`in:inbox -label:"${PROCESSED_LABEL}"`, 0, MAX_THREADS_PER_RUN);
+  const threads = GmailApp.search(`in:inbox -label:"${PROCESSED_LABEL}" after:${setupAt}`, 0, MAX_THREADS_PER_RUN);
 
   threads.forEach(thread => {
     try {
